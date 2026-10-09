@@ -4,6 +4,8 @@
 -- Studio to change the view.
 local RunService = game:GetService("RunService")
 
+local Markers = require(script.Parent.Markers)
+local ShiftClient = require(script.Parent.ShiftClient)
 local Types = require(game:GetService("ReplicatedStorage").Shared.Types)
 
 local MARKER_NAMES: { [Types.Desk]: string } = { Scanner = "ScannerCamera", Clerk = "ClerkCamera" }
@@ -20,7 +22,7 @@ local askedAt = 0
 local nextLookAt = 0
 local warned = false
 
--- The marker may not have reached this client yet when the desk is first known,
+-- The marker may not have reached this player yet when the desk is first known,
 -- so keep looking for a while instead of giving up at once.
 local function findGoal(desk: Types.Desk)
 	local now = os.clock()
@@ -28,8 +30,8 @@ local function findGoal(desk: Types.Desk)
 		return
 	end
 	nextLookAt = now + RETRY_SECONDS
-	local marker = workspace:FindFirstChild(MARKER_NAMES[desk], true)
-	if marker and marker:IsA("BasePart") then
+	local marker = Markers.find(MARKER_NAMES[desk])
+	if marker then
 		goal = marker.CFrame
 	elseif not warned and now - askedAt > GIVE_UP_SECONDS then
 		warned = true
@@ -62,14 +64,16 @@ local function step(dt: number)
 	end
 end
 
-function DeskCamera.show(desk: Types.Desk)
-	wanted = desk
-	goal = nil
-	askedAt = os.clock()
-	nextLookAt = 0
-end
-
 function DeskCamera.start()
+	ShiftClient.onChanged(function()
+		local desk = ShiftClient.getDesk()
+		if desk and desk.desk ~= wanted then
+			wanted = desk.desk
+			goal = nil
+			askedAt = os.clock()
+			nextLookAt = 0
+		end
+	end)
 	RunService:BindToRenderStep("DeskCamera", Enum.RenderPriority.Camera.Value + 1, step)
 end
 
