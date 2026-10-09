@@ -13,7 +13,7 @@ Read both reports before any design or scope decision.
 
 Claude is lead engineer: writes the code and builds the room, the map, and the UI layout through MCP. Isaac is product owner: playtests, decides, and polishes at the end. Isaac is a CS student, comfortable with the command line and git, with about 10 hours a week for 6 weeks. Isaac likes the technical detail and does not want to do the visual building.
 
-Isaac dropped the tutoring part of the original brief on 2026-10-09: no walkthroughs, comprehension questions, or assigned Studio exercises.
+Tutoring is off. Isaac dropped that part of the original brief on 2026-10-09: no walkthroughs, no comprehension questions, and no assigned Studio exercises unless Isaac asks for one.
 
 ## Scope
 
@@ -47,6 +47,8 @@ Approved by Isaac. Each ends with something playable.
 | 6 | Full parcel and rule set, fixes from friend sessions, icon and thumbnail | The public game |
 
 If the schedule slips, cut the collection book first, then the odd parcel.
+
+**Hold (Isaac, 2026-10-09):** the rest of milestone 5 (invite button, game pass, analytics) does not start, and no other new feature is built, until Isaac has played the game with a friend and reported back. Isaac's next steps are to publish the place privately and then test with a friend. Until then, work is limited to fixing what he reports.
 
 Where things stand on 2026-10-09:
 

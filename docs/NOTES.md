@@ -4,9 +4,33 @@ Plain-language notes on every system, kept current as the game is built.
 
 ## Status
 
-Milestones 3 and 4 of 6 are built and waiting for a playtest, along with the first part of milestone 5. Milestone 3 is the ping board, the parcel moving through the room, and feedback on every verdict. Milestone 4 is the rule of the day, the odd parcel, the postal licence, the collection book, and saving. From milestone 5, the no-menu start and the first-time prompts are built; the invite button, the game pass, and analytics are not. Milestone 2 (the two desks) is built and its solo side is approved.
+As of 2026-10-09.
 
-Two things are checked only by simulation so far. Nothing has been played by two real people yet, and saving has not run against Roblox's real data store, which needs the place to be published.
+**Built**
+
+| Milestone | What it is | Played by Isaac |
+|---|---|---|
+| 1 | The shift loop: parcels arrive, the server judges Ship or Return, three mistakes or the timer ends it. The post office room. | Yes, approved |
+| 2 | The two desks: one player alone switches between them with limited rulebook time; two or more are split. | Alone only |
+| 3 | The ping board, the parcel moving through the room, feedback on every verdict. | No |
+| 4 | The rule of the day, the odd parcel, the postal licence, the collection book, saving. | No |
+| 5, in part | The no-menu start and the three first-time prompts. The invite button, the game pass, and analytics are not built. | No |
+
+Milestone 6 has not started.
+
+**Untested**
+
+- **Two real players.** Nothing has been played by two people at once. The server side is checked by a simulation (`tests/Simulate.luau`, 109 checks); what two players actually see on their screens is not.
+- **Real saving.** Saving has only run against a stand-in data store in that simulation. In Studio the place is unpublished, so the game runs with one warning and saves nothing.
+- **The ping board design.** It was built without the paper test the design report asked for: two friends who stay silent, to see whether the stamps are enough.
+- **The sounds.** Five were picked from Creator Store descriptions without being heard, and there is none for a correct verdict.
+- **The last change to the prompts.** `src/client/Tutorial.luau` was reshaped after its review and has passed the static checks only.
+
+**Next**
+
+1. Isaac publishes the place privately and turns on Studio access to API services, so saving can meet the real store.
+2. Isaac plays with a friend.
+3. Nothing more of milestone 5 is built until he has done that and reported back.
 
 ## The toolchain
 
