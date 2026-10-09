@@ -15,7 +15,12 @@
 -- receive, and nothing in the game requires it.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
+
+if RunService:IsRunning() then
+	error("tests/Simulate is a development tool and must not run in a live game or a playtest")
+end
 
 local function signal()
 	local handlers = {}
@@ -66,17 +71,14 @@ for _, child in ReplicatedStorage.Remotes:GetChildren() do
 end
 
 -- Short delays so a scenario takes a fraction of a second.
-local config = {
+local quick = {
 	ShiftSeconds = 60,
-	MaxStrikes = 3,
-	RulesPerShift = 3,
 	ShiftStartDelay = 0.05,
 	FirstParcelDelay = 0.05,
 	ParcelGap = 0.05,
-	ReturnChance = 0.5,
 	RequestCooldown = 0,
 	PeekSeconds = 0.4,
-	PingCooldown = 0,
+	PingBurst = 1000, -- lowered to the real value where the limit itself is tested
 }
 
 -- Module loader: `script.Parent.X` and `ReplicatedStorage.Shared.X` both become
@@ -106,8 +108,6 @@ end
 
 local stubs = {
 	Remotes = remotes,
-	Config = config,
-	ParcelProp = { show = function() end, hide = function() end },
 }
 local loaded = {}
 local function load(name)
@@ -130,6 +130,16 @@ local function load(name)
 	end
 	return loaded[name]
 end
+
+-- The game's own settings, with the short delays laid over them. Config is
+-- frozen, so this is a copy the tests can also change as they go.
+local realConfig = load("Config")
+loaded.Config = nil
+local config = table.clone(realConfig)
+for key, value in quick do
+	config[key] = value
+end
+stubs.Config = config
 
 local RuleDefs = load("RuleDefs")
 local Rulebook = load("Rulebook")
@@ -268,6 +278,7 @@ local function rightVerdict()
 end
 
 load("ShiftService").start()
+load("PingService").start()
 
 section("one player")
 local a = join("A")
@@ -332,6 +343,120 @@ check(
 	count("A", "ParcelScanned", m) >= 1 and count("B", "ParcelScanned", m) == 0
 )
 checkSplit("pair, next parcel")
+
+section("the ping board in a pair")
+local function ping(player, stampId, choice)
+	local seen = shift(player.Name)
+	remotes.SendPing.OnServerEvent:Fire(player, stampId, seen.deal, seen.parcelSeq, choice)
+end
+local function lastPing(name)
+	local args = last(name, "PingShown")
+	return args and args[1]
+end
+local inside = last("A", "ParcelScanned")[2]
+m = mark()
+ping(a, "colour")
+check(
+	"the Scanner's colour stamp reaches both players with the parcel's true colour",
+	count("A", "PingShown", m) == 1
+		and count("B", "PingShown", m) == 1
+		and lastPing("B").from == "Scanner"
+		and lastPing("B").value == inside.colour
+)
+ping(a, "handle")
+check("the handle stamp carries the true number of handles", lastPing("B").value == inside.handles)
+ping(a, "shape")
+check("the shape stamp carries the true shape", lastPing("B").value == inside.shape)
+m = mark()
+ping(b, "colour")
+check(
+	"the Clerk's colour stamp is a question with no value",
+	count("A", "PingShown", m) == 1 and lastPing("A").from == "Clerk" and lastPing("A").value == nil
+)
+m = mark()
+ping(b, "rule", 2)
+check(
+	"the Clerk's rule stamp shows the rule at that place in the rulebook",
+	lastPing("A").ruleId == currentRules()[1][2]
+)
+m = mark()
+for _, bad in { 0, 4, 1.5, 0 / 0, math.huge, "2", {} } do
+	ping(b, "rule", bad)
+end
+ping(b, "rule")
+check("a rule stamp naming no real rule is ignored", count("A", "PingShown", m) == 0)
+m = mark()
+ping(a, "rule", 1)
+check(
+	"the Scanner's rule stamp is a question and shows no rule",
+	count("B", "PingShown", m) == 1 and lastPing("B").ruleId == nil
+)
+m = mark()
+ping(a, "nonsense")
+ping(a, 42)
+ping(a)
+check("an unknown stamp is ignored", count("A", "PingShown", m) == 0)
+
+-- A stamp says which rulebook and parcel the player was looking at.
+local looking = shift("A")
+m = mark()
+remotes.SendPing.OnServerEvent:Fire(a, "check", looking.deal - 1, looking.parcelSeq)
+check("a stamp pressed under an earlier rulebook is dropped", count("B", "PingShown", m) == 0)
+remotes.SendPing.OnServerEvent:Fire(a, "colour", looking.deal, looking.parcelSeq - 1)
+check("a trait stamp about an earlier parcel is dropped", count("B", "PingShown", m) == 0)
+remotes.SendPing.OnServerEvent:Fire(a, "check", looking.deal, looking.parcelSeq - 1)
+check("a plain stamp about an earlier parcel is dropped", count("B", "PingShown", m) == 0)
+remotes.SendPing.OnServerEvent:Fire(b, "rule", looking.deal, looking.parcelSeq - 1, 1)
+check(
+	"a rule stamp is not tied to a parcel, and says which rulebook and parcel it was sent under",
+	count("A", "PingShown", m) == 1
+		and lastPing("A").deal == looking.deal
+		and lastPing("A").parcelSeq == looking.parcelSeq
+)
+m = mark()
+remotes.SendPing.OnServerEvent:Fire(a, "colour", looking.deal, "x")
+remotes.SendPing.OnServerEvent:Fire(a, "colour")
+check(
+	"a stamp that does not say what the player was looking at is dropped",
+	count("B", "PingShown", m) == 0
+)
+
+m = mark()
+ping(a, "check")
+ping(b, "hurry")
+check("plain stamps go through from either desk", count("A", "PingShown", m) == 2)
+stamp(b, shift("B").parcelSeq, rightVerdict())
+m = mark()
+ping(a, "colour")
+check(
+	"with no parcel on the desk the Scanner's trait stamp is ignored",
+	count("B", "PingShown", m) == 0
+)
+settleDown()
+
+-- The limit on stamps, at the game's real settings: a short run, then a trickle.
+config.PingBurst = realConfig.PingBurst
+m = mark()
+for _ = 1, 12 do
+	ping(b, "hurry")
+end
+check(
+	"twelve stamps at once: only the allowed run gets through",
+	count("A", "PingShown", m) == realConfig.PingBurst,
+	count("A", "PingShown", m) .. " of 12, allowance " .. realConfig.PingBurst
+)
+task.wait(1 / realConfig.PingPerSecond + 0.15)
+m = mark()
+for _ = 1, 5 do
+	ping(b, "hurry")
+end
+check(
+	"a second later, one more is allowed",
+	count("A", "PingShown", m) == 1,
+	count("A", "PingShown", m) .. " of 5"
+)
+config.PingBurst = quick.PingBurst
+settleDown()
 
 section("the Clerk leaves, then comes back")
 m = mark()
@@ -449,6 +574,10 @@ check(
 remotes.RequestSwitch.OnServerEvent:Fire(c)
 task.wait(0.05)
 check("a further switch is refused until the next parcel", desk("C").desk == "Scanner")
+m = mark()
+ping(c, "check")
+ping(c, "colour")
+check("a lone player's stamps go nowhere", count("C", "PingShown", m) == 0)
 
 leave(c)
 table.insert(lines, ("%d checks, %d failed, %d messages sent"):format(checks, failures, #sent))
