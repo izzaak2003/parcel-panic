@@ -6,6 +6,15 @@
     "ReplicatedStorage": {
       "Shared": {
         "$path": "src/shared"
+      },
+      "Remotes": {
+        "$className": "Folder",
+        "ShiftSync": { "$className": "RemoteEvent" },
+        "RulebookShown": { "$className": "RemoteEvent" },
+        "ParcelScanned": { "$className": "RemoteEvent" },
+        "VerdictJudged": { "$className": "RemoteEvent" },
+        "SubmitVerdict": { "$className": "RemoteEvent" },
+        "RequestShift": { "$className": "RemoteEvent" }
       }
     },
 
