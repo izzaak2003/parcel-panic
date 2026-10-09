@@ -90,6 +90,8 @@ There are two desks. The Scanner desk shows what is inside the parcel. The Clerk
 
 **When the team changes.** Someone who was alone has seen both halves, and someone moved across to fill an empty desk has seen the other side. So whenever a player joins or leaves and two or more remain, the server picks new rules and replaces the parcel on the desk, at no cost to the team. Whatever anyone saw before is then out of date, which also makes leaving and rejoining pointless. The alternative was to track who had been sent what; dealing again is simpler and cannot miss a case.
 
+This is checked by `tests/Simulate.luau`. Studio's automated playtest has only one player, so the simulation loads the real server code with made-up players and fake messages, walks them through joining, leaving, and rejoining, and checks after every step that no Scanner holds the rulebook in force and no Clerk holds the parcel on the desk. With the re-deal switched off it reports exactly that leak.
+
 A lone player is sent both halves of the hidden information, because they are entitled to both. The 15-second limit is therefore a rule the game shows, not a secret the server keeps, and a modified client could keep the rules on screen. The split that the server does enforce is between different players.
 
 ### Parcels and rules as data (`src/shared/ParcelDefs.luau`, `src/shared/RuleDefs.luau`)

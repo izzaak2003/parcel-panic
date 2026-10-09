@@ -23,6 +23,9 @@
     "ServerScriptService": {
       "Server": {
         "$path": "src/server"
+      },
+      "Tests": {
+        "$path": "tests"
       }
     },
 

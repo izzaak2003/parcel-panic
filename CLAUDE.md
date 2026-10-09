@@ -175,4 +175,6 @@ rojo build -o build.rbxl   # confirm the project file is valid
 - `user_mouse_input` with an `instance_path` clicks a real button, which checks the UI wiring that firing a remote directly skips.
 - `screen_capture` returns a black 3D view whenever the Studio window is minimized, in Edit and Play alike. Check with `IsIconic` before trusting a dark screenshot. Take captures one at a time; two at once can hang.
 - In Edit mode `StarterGui.DeskGui` draws over the viewport. Set `Enabled = false` for room screenshots and set it back to `true` before anything else.
-- One MCP playtest is one player. Anything that needs two clients has to be tested by Isaac with a two-player local test or a friend, and reported as unverified until then.
+- One MCP playtest is one player. For anything that depends on two or more, run the simulation: in Edit mode, `return require(game.ServerScriptService.Tests.Simulate:Clone())` through `execute_luau`. It loads the real server modules with made-up players and fake remotes and checks who is sent what across joins, leaves, and rejoins. Add a scenario to `tests/Simulate.luau` for every new server rule that involves more than one player.
+- The simulation covers the server only. What two real clients see on screen still has to be tested by Isaac with a two-player local test or a friend, and reported as unverified until then.
+- Adding a new top-level service to `default.project.json` does not sync while the plugin is connected; adding children under a service that is already mapped does.
