@@ -52,11 +52,11 @@ Open design questions, to settle in the milestone named:
 
 - Week 4: set the experience's maximum players to 4 when the place is published.
 - Week 5: a player who joins late inherits the running shift's mistakes and remaining time, or lands on someone else's results panel. Decide what a joiner sees along with the cold open.
-- Before week 3: the eight stamps carry no values, so a "colour" stamp cannot say "red". Isaac tests the board on paper with two silent friends before it is built.
-- Week 3: in the room a shipped parcel leaves to the right and a returned one goes back down the chute, but the Ship button is on the left of the screen. Line the two up when verdicts start moving the parcel.
-- Week 3: a re-deal (someone joined or left) is silent: the parcel vanishes and the Clerk's rules change with no cue. Give it one with the verdict feedback.
+- The ping board was built on 2026-10-09 without the paper test, while Isaac was away and had asked for work to continue. It still needs testing with two real people who do not talk: can they get a parcel right in about 20 seconds using only the stamps? Expect to change the stamps after that.
+- The five sounds in `SoundService.Sfx` were picked from Creator Store descriptions without being heard, and there is none for a correct verdict. Isaac should listen and swap them.
+- For Isaac: with three or four players a ping says only SCANNER or CLERK. Should it also show the sender's name?
+- For Isaac: `tests/` is synced into `ServerScriptService.Tests` and so ships in the published place. It is inert there and refuses to run in a live game. Keep it, or move it to a separate Rojo project file before publishing?
 - Week 4: a re-deal discards a parcel at no cost, so do not reward low-mistake shifts without counting discards, and keep the rule of the day across a re-deal.
-- Week 3: verdict feedback must ignore verdicts that were judged while a joining player was still loading; those replay all at once when the client connects.
 - Week 4: the repo is public, so anything seeded only from the date can be worked out by anyone. Date-seed only the rule of the day, which every player learns anyway, and keep the other rules and the parcels on a separate unseeded generator.
 
 ## Design decisions made so far
@@ -66,6 +66,9 @@ Open design questions, to settle in the milestone named:
 - A player alone starts at the X-ray and may open the rulebook for 15 seconds per parcel. Unused time is kept; it refills with each parcel.
 - Whenever someone joins or leaves and two or more players remain, the server deals new rules and replaces the parcel on the desk. This is what keeps the halves apart across a change of team, in place of remembering seats per player.
 - Players are stood at their desk and cannot walk. The camera is fixed at a marker part per desk.
+- The ping board answers "a stamp cannot say red" this way: a desk states what it knows and asks about what it does not. A trait stamp from the Scanner carries the true value, filled in by the server; from the Clerk it is a question. The rule stamp from the Clerk shows one rule; from the Scanner it asks for one. There is no free text anywhere.
+- The parcel in the room, the moving belt, and all feedback are drawn on each client from public state. The server creates nothing in the 3D world.
+- On screen, Return is on the left and Ship on the right, matching where the parcel goes in the room.
 
 ## Monetization
 
@@ -74,7 +77,7 @@ One cosmetic game pass. No purchase prompt at the moment of failure, no paid ran
 ## Where things live
 
 - `src/` is the source of truth for all code. Rojo syncs it from disk into Studio, one way. Never edit these scripts in Studio or through MCP `multi_edit`; the next sync overwrites them.
-- Everything that is not a script (the room, parts, UI layout, sounds, lighting) lives in the Studio place, not in `src/`. Claude builds it through MCP and says what changed; Isaac polishes it at the end. MCP cannot save the place, so after changing it ask Isaac to press Ctrl+S, then commit `ParcelPanic.rbxl`.
+- Everything that is not a script (the room, parts, UI layout, sounds, lighting) lives in the Studio place, not in `src/`. Claude builds it through MCP and says what changed; Isaac polishes it at the end. MCP cannot save the place. Normally ask Isaac to press Ctrl+S after changing it, then commit `ParcelPanic.rbxl`. When Isaac has said to carry on without him, save it from PowerShell instead: bring the Studio window to the front, check that it is in front, send Ctrl+S with `SendKeys`, and confirm the file's time changed. Only in Edit mode.
 - Build with parts first. Studio's mesh, material, and texture generation count against Isaac's Assistant quota, so ask before using them.
 - The room is `Workspace.PostOffice`, a Model with one child Model per area. Rebuild an area by replacing its Model, not by editing parts one at a time.
 - The place is saved as `ParcelPanic.rbxl` in the repo root and committed at each milestone, so the room and UI are in version control too.
