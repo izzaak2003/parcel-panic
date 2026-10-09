@@ -1,7 +1,10 @@
 --!strict
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+-- Everything that exists when the server starts has arrived once the game
+-- reports loaded, so the modules below can reach ReplicatedStorage by path.
+if not game:IsLoaded() then
+	game.Loaded:Wait()
+end
 
-local Shared = ReplicatedStorage:WaitForChild("Shared")
-local hello = require(Shared:WaitForChild("Hello")) :: (string) -> string
+local DeskUi = require(script.DeskUi)
 
-print(hello("client"))
+DeskUi.start()
