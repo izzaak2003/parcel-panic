@@ -10,8 +10,10 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(script.Parent.Config)
+local DeskService = require(script.Parent.DeskService)
 local ParcelGenerator = require(script.Parent.ParcelGenerator)
 local ParcelProp = require(script.Parent.ParcelProp)
+local RateLimit = require(script.Parent.RateLimit)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local RuleDefs = require(ReplicatedStorage.Shared.RuleDefs)
 local Rulebook = require(script.Parent.Rulebook)
@@ -28,7 +30,7 @@ local endsAt = 0
 local strikes = 0
 local correct = 0
 
--- Hidden state. It leaves the server only through RulebookShown and ParcelScanned.
+-- Hidden state. It leaves the server only through showRulebook and showParcel.
 local rules: { RuleDefs.Rule } = {}
 local deck: ParcelGenerator.Deck? = nil
 local parcel: Types.Contents? = nil -- the parcel on the desk, or nil when the desk is empty
@@ -39,7 +41,6 @@ local parcelSeq = 0
 local startTimer: thread? = nil
 local endTimer: thread? = nil
 local parcelTimer: thread? = nil
-local lastRequestAt: { [Player]: number } = {}
 
 local function publicState(): Types.PublicShiftState
 	return {
@@ -57,9 +58,11 @@ local function broadcast()
 	Remotes.ShiftSync:FireAllClients(publicState())
 end
 
--- For now every player sits at both desks, so everyone is shown the rulebook and
--- the X-ray. Once desks exist, each of these goes only to the players at its desk.
+-- The rulebook goes only to players entitled to the Clerk desk.
 local function showRulebook(player: Player)
+	if not DeskService.sees(player, "Clerk") then
+		return
+	end
 	local ids = {}
 	for index, rule in rules do
 		ids[index] = rule.id
@@ -67,8 +70,9 @@ local function showRulebook(player: Player)
 	Remotes.RulebookShown:FireClient(player, ids)
 end
 
+-- What is inside the parcel goes only to players entitled to the Scanner desk.
 local function showParcel(player: Player)
-	if parcel then
+	if parcel and DeskService.sees(player, "Scanner") then
 		Remotes.ParcelScanned:FireClient(player, parcelSeq, parcel)
 	end
 end
@@ -93,6 +97,7 @@ local function endShift(reason: Types.EndReason)
 	parcel = nil
 	ParcelProp.hide()
 	broadcast()
+	DeskService.closePeek()
 end
 
 local function putParcelOnDesk()
@@ -107,6 +112,7 @@ local function putParcelOnDesk()
 	for _, player in Players:GetPlayers() do
 		showParcel(player)
 	end
+	DeskService.openPeek()
 end
 
 -- Each timer clears its own variable before it runs, so cancelTimers only ever
@@ -151,28 +157,31 @@ local function startShift()
 	for _, player in Players:GetPlayers() do
 		showRulebook(player)
 	end
+	DeskService.openPeek()
 	queueParcel(Config.FirstParcelDelay)
 end
 
--- One shared limit for everything a player can ask for.
-local function allowRequest(player: Player): boolean
-	-- A request can still be in flight when its sender leaves. Dropping it keeps a
-	-- player who has gone from being written back into lastRequestAt.
-	if player.Parent ~= Players then
-		return false
+-- Called when someone joins or leaves, before anyone is sent anything.
+--
+-- A change of company can leave a player holding a half they are no longer
+-- entitled to: someone who was alone has seen both, and someone moved across to
+-- fill an empty desk has seen the other side. So whenever two or more players
+-- remain, the rules are picked again and the parcel on the desk is replaced, at
+-- no cost to the team. What anyone saw before is then worth nothing.
+-- DeskService sends each player their share of the new deal straight after this.
+local function onRosterChanged(playerCount: number)
+	if phase ~= "Running" or playerCount < 2 then
+		return
 	end
-	local now = os.clock()
-	local last = lastRequestAt[player]
-	if last and now - last < Config.RequestCooldown then
-		return false
-	end
-	lastRequestAt[player] = now
-	return true
+	rules, deck = chooseRules()
+	parcel = nil
+	ParcelProp.hide()
+	queueParcel(Config.ParcelGap)
 end
 
 -- Everything after `player` comes from the client and may be anything at all.
 local function onSubmitVerdict(player: Player, seq: unknown, verdict: unknown)
-	if not allowRequest(player) then
+	if not RateLimit.allow(player, "verdict") or not DeskService.canStamp(player) then
 		return
 	end
 	if typeof(seq) ~= "number" or (verdict ~= "Ship" and verdict ~= "Return") then
@@ -204,13 +213,16 @@ local function onSubmitVerdict(player: Player, seq: unknown, verdict: unknown)
 end
 
 local function onRequestShift(player: Player)
-	if not allowRequest(player) or phase ~= "Ended" then
+	if not RateLimit.allow(player, "shift") or phase ~= "Ended" then
 		return
 	end
 	startShift()
 end
 
-local function onPlayerAdded(player: Player)
+-- Called when a player joins, and again whenever what they may see changes:
+-- a desk switch, or someone else joining or leaving. Sends them everything they
+-- are now entitled to. The client hides whatever belongs to a desk it has left.
+local function onDeskChanged(player: Player)
 	Remotes.ShiftSync:FireClient(player, publicState())
 	if phase == "Running" then
 		showRulebook(player)
@@ -226,14 +238,7 @@ end
 function ShiftService.start()
 	Remotes.SubmitVerdict.OnServerEvent:Connect(onSubmitVerdict)
 	Remotes.RequestShift.OnServerEvent:Connect(onRequestShift)
-
-	Players.PlayerRemoving:Connect(function(player)
-		lastRequestAt[player] = nil
-	end)
-	Players.PlayerAdded:Connect(onPlayerAdded)
-	for _, player in Players:GetPlayers() do
-		onPlayerAdded(player)
-	end
+	DeskService.start(onDeskChanged, onRosterChanged)
 end
 
 return ShiftService
