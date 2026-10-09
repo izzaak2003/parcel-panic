@@ -4,7 +4,7 @@ Plain-language notes on every system, kept current as the game is built.
 
 ## Status
 
-Milestone 1 of 6: a full solo shift where the player sees both the X-ray and the rulebook. No desks, roles, saving, or ping board yet.
+Milestone 1 of 6 is finished and approved: a full solo shift where the player sees both the X-ray and the rulebook, set in the post office room. The desks in the room are scenery for now; roles, saving, and the ping board are not built yet.
 
 ## The toolchain
 
@@ -119,6 +119,23 @@ Shift length, mistake limit, delays, and the share of parcels that go back are n
 
 When a parcel arrives, the server puts a plain cardboard box on top of the part named `ParcelSpot`. The box looks the same every time. What is inside is never put in the 3D world, because every client can read the 3D world.
 
+### The room (`Workspace.PostOffice` in the Studio place)
+
+The post office is one room built from about 340 plain parts, grouped into one Model per area so an area can be rebuilt without touching the others.
+
+| Model | What it is |
+|---|---|
+| `Shell` | Floor, two-tone walls, two wide windows, timber beams, glass roof |
+| `Conveyor` | The belt across the room, the yellow IN hatch on the left wall, the green SHIP hatch on the right |
+| `ScanStation` | The yellow plate parcels stop on (`ParcelSpot`) and the X-ray head hanging over it |
+| `ReturnChute` | The red slide off the back of the belt into the RETURN bin |
+| `ScannerDesk`, `ClerkDesk` | The two desks, each with a nameplate and props; the rules board stands beside the Clerk's |
+| `Rug`, `Decor`, `Lights`, `Outside` | Rug, shelves, doors, pigeonholes, sacks, trolley, clock, posters, lamps, and the trees seen through the windows |
+
+The layout answers a problem from the first playtest, where the parcel looked like something to pick up. It now arrives on a belt and stops under a scanner, with the two places it can go in view, so it reads as an object being inspected.
+
+The code depends on exactly one thing here: the part named `ParcelSpot`. Everything else is scenery.
+
 ## Names the code depends on
 
 The code looks these up by name in the Studio place. Renaming or deleting one breaks the game; moving, resizing, recolouring, and restyling are all safe.
@@ -129,7 +146,7 @@ Where the type says "any element", the code only shows, hides, or recolours it, 
 
 | Name | Type | Used for |
 |---|---|---|
-| `ParcelSpot` | any part, anywhere in Workspace | Parcels appear on top of it. Keep only one: if there are two, the first one found is used. |
+| `ParcelSpot` | any part, anywhere in Workspace (currently in `PostOffice.ScanStation`) | Parcels appear on top of it. Keep only one: if there are two, the first one found is used. |
 
 `StarterGui.DeskGui` (a ScreenGui with `ResetOnSpawn` off):
 

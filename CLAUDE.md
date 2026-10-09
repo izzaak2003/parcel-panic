@@ -11,7 +11,9 @@ Read both reports before any design or scope decision.
 
 ## Roles
 
-Claude is lead engineer and tutor: writes the code and teaches enough that Isaac can understand, debug, and explain every part. Isaac is product owner and polishes by hand. Isaac is a CS student, comfortable with the command line and git, new to Roblox Studio and Luau, with about 10 hours a week for 6 weeks.
+Claude is lead engineer: writes the code and builds the room, the map, and the UI layout through MCP. Isaac is product owner: playtests, decides, and polishes at the end. Isaac is a CS student, comfortable with the command line and git, with about 10 hours a week for 6 weeks. Isaac likes the technical detail and does not want to do the visual building.
+
+Isaac dropped the tutoring part of the original brief on 2026-10-09: no walkthroughs, comprehension questions, or assigned Studio exercises.
 
 ## Scope
 
@@ -51,6 +53,7 @@ Open design questions, to settle in the milestone named:
 - Week 2: how three and four players share two desks. Proposal: extra players double up on a desk.
 - Week 2: there is one shift per server, so a player who joins late inherits its mistakes and remaining time, or lands on someone else's results panel. Decide this together with desk assignment. Desk assignment must be held on the server per UserId for the whole shift, or a player can rejoin and collect both halves.
 - Before week 3: the eight stamps carry no values, so a "colour" stamp cannot say "red". Isaac tests the board on paper with two silent friends before it is built.
+- Week 3: in the room a shipped parcel leaves to the right and a returned one goes back down the chute, but the Ship button is on the left of the screen. Line the two up when verdicts start moving the parcel.
 - Week 3: verdict feedback must ignore verdicts that were judged while a joining player was still loading; those replay all at once when the client connects.
 - Week 4: the repo is public, so anything seeded only from the date can be worked out by anyone. Date-seed only the rule of the day, which every player learns anyway, and keep the other rules and the parcels on a separate unseeded generator.
 
@@ -61,7 +64,9 @@ One cosmetic game pass. No purchase prompt at the moment of failure, no paid ran
 ## Where things live
 
 - `src/` is the source of truth for all code. Rojo syncs it from disk into Studio, one way. Never edit these scripts in Studio or through MCP `multi_edit`; the next sync overwrites them.
-- Everything that is not a script (the room, parts, UI layout, sounds, lighting) lives in the Studio place, not in `src/`. Isaac builds and polishes it by hand. Claude changes it through MCP only when a milestone needs it, and says so when it does.
+- Everything that is not a script (the room, parts, UI layout, sounds, lighting) lives in the Studio place, not in `src/`. Claude builds it through MCP and says what changed; Isaac polishes it at the end. MCP cannot save the place, so after changing it ask Isaac to press Ctrl+S, then commit `ParcelPanic.rbxl`.
+- Build with parts first. Studio's mesh, material, and texture generation count against Isaac's Assistant quota, so ask before using them.
+- The room is `Workspace.PostOffice`, a Model with one child Model per area. Rebuild an area by replacing its Model, not by editing parts one at a time.
 - The place is saved as `ParcelPanic.rbxl` in the repo root and committed at each milestone, so the room and UI are in version control too.
 - Scripts find place instances by name, tag, or attribute. Record every name the code depends on in `docs/NOTES.md`.
 
@@ -104,12 +109,9 @@ Rojo mapping (`default.project.json`):
 
 Run the `luau-reviewer` subagent on the changed files and fix what it finds. Commit small and often with clear messages; the public repo is Isaac's portfolio.
 
-## Tutoring
+## Documentation
 
-- Before each new system, explain in a few sentences what it is and why Roblox does it this way. Define every Roblox term the first time it appears.
-- After writing a system, give a short walkthrough of the code and ask one question that checks understanding. If the answer is wrong, explain again differently.
-- Give small hands-on Studio tasks (placing parts, adjusting UI, tuning values) so Isaac learns the editor.
-- Keep `docs/NOTES.md` current: what each system does, in plain language, good enough to explain the project to an employer.
+Keep `docs/NOTES.md` current: what each system does, in plain language, good enough to explain the project to an employer, plus every name the code depends on in the Studio place.
 
 ## Milestone self-check
 
@@ -118,8 +120,16 @@ A milestone is done only when all of these hold:
 - the playtest ran and the console is clean;
 - `luau-reviewer` passed the code;
 - `docs/NOTES.md` is current;
-- Isaac answered the comprehension question;
-- nothing outside version-one scope was added.
+- nothing outside version-one scope was added;
+- Isaac has playtested and approved it.
+
+## Playtest feedback so far
+
+Milestone 1, Isaac, 2026-10-09: approved. The loop of speeding up, slipping, slowing down, and ramping up again works. Three problems to design against:
+
+- It was not clear at first what to do. The cold open and its three prompts (week 5) have to carry this.
+- The parcel in the room looked like something to interact with. The room must make it read as an object being scanned, and verdicts should visibly move it (week 3).
+- It felt like only clicking and reading. Watch whether the desk split (week 2) and the ping board (week 3) fix this, especially in solo.
 
 ## Communication
 
@@ -153,4 +163,6 @@ rojo build -o build.rbxl   # confirm the project file is valid
 - `execute_luau` on the Client datamodel can fire the remotes and read `PlayerGui`. Use it to send forged requests and to read what the player sees.
 - The gap between starting a playtest and the next tool call is long and unpredictable. Attach listeners first, then trigger the thing under test; do not rely on catching an event that fires at startup.
 - `user_mouse_input` with an `instance_path` clicks a real button, which checks the UI wiring that firing a remote directly skips.
+- `screen_capture` returns a black 3D view whenever the Studio window is minimized, in Edit and Play alike. Check with `IsIconic` before trusting a dark screenshot. Take captures one at a time; two at once can hang.
+- In Edit mode `StarterGui.DeskGui` draws over the viewport. Set `Enabled = false` for room screenshots and set it back to `true` before anything else.
 - One MCP playtest is one player. Anything that needs two clients has to be tested by Isaac with a two-player local test or a friend, and reported as unverified until then.
