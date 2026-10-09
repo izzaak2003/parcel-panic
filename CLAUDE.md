@@ -50,13 +50,17 @@ If the schedule slips, cut the collection book first, then the odd parcel.
 
 Open design questions, to settle in the milestone named:
 
-- Week 4: set the experience's maximum players to 4 when the place is published.
+- Saving has only been run against a fake data store in the simulation. To check it for real Isaac must publish the place (File, then Publish to Roblox), then in Game Settings under Security turn on Studio access to API services, set the maximum players to 4, and play two sessions to see a stamp survive leaving and coming back.
 - Week 5: a player who joins late inherits the running shift's mistakes and remaining time, or lands on someone else's results panel. Decide what a joiner sees along with the cold open.
 - The ping board was built on 2026-10-09 without the paper test, while Isaac was away and had asked for work to continue. It still needs testing with two real people who do not talk: can they get a parcel right in about 20 seconds using only the stamps? Expect to change the stamps after that.
 - The five sounds in `SoundService.Sfx` were picked from Creator Store descriptions without being heard, and there is none for a correct verdict. Isaac should listen and swap them.
 - For Isaac: with three or four players a ping says only SCANNER or CLERK. Should it also show the sender's name?
+- For Isaac: the collection book has seven entries (six items and the odd one) where the design report says six slots. Keep seven, or make the odd parcel something other than a book entry?
+- For Isaac: filling the licence card shows "6 of 6" and nothing more; the count of filled cards rises only when a seventh stamp starts the next card. Should a full card be celebrated?
+- For Isaac: the rule of the day can be the same two days running, about one day in ten. A fixed cycle through all ten rules would prevent that.
+- For Isaac: because the rule of the day is public, a Scanner can tell alone that a parcel matching it goes back. That is intended; watch whether it helps or hurts in the two-player test.
 - For Isaac: `tests/` is synced into `ServerScriptService.Tests` and so ships in the published place. It is inert there and refuses to run in a live game. Keep it, or move it to a separate Rojo project file before publishing?
-- Week 4: a re-deal discards a parcel at no cost, so do not reward low-mistake shifts without counting discards, and keep the rule of the day across a re-deal.
+- A re-deal discards a parcel at no cost. Nothing rewards low-mistake shifts today (the stamp counts parcels handled correctly), so this is harmless; keep it that way or count discards.
 - Week 4: the repo is public, so anything seeded only from the date can be worked out by anyone. Date-seed only the rule of the day, which every player learns anyway, and keep the other rules and the parcels on a separate unseeded generator.
 
 ## Design decisions made so far
@@ -69,6 +73,10 @@ Open design questions, to settle in the milestone named:
 - The ping board answers "a stamp cannot say red" this way: a desk states what it knows and asks about what it does not. A trait stamp from the Scanner carries the true value, filled in by the server; from the Clerk it is a question. The rule stamp from the Clerk shows one rule; from the Scanner it asks for one. There is no free text anywhere.
 - The parcel in the room, the moving belt, and all feedback are drawn on each client from public state. The server creates nothing in the 3D world.
 - On screen, Return is on the left and Ship on the right, matching where the parcel goes in the room.
+- The rule of the day is public: it is in the state every player gets and is shown to both desks. It is seeded from the UTC date, and the repo is public, so it could never be secret. The other two rules in a rulebook come from an unseeded generator and stay with the Clerk. The day is fixed when the shift starts, so a re-deal keeps the rule of the day.
+- A licence stamp is earned at most once per UTC day, at the moment a player has been present for `Config.StampParcels` correctly handled parcels in one shift. A new player starts with one. Missing a day loses nothing, and there are no streaks.
+- A correctly handled item goes in the collection book of every player present.
+- A save never replaces stored data: it merges a snapshot into what `UpdateAsync` reads. A player whose load failed is never saved.
 
 ## Monetization
 

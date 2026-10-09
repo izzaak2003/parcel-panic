@@ -4,7 +4,9 @@ Plain-language notes on every system, kept current as the game is built.
 
 ## Status
 
-Milestone 3 of 6 is built and waiting for a playtest: the ping board, the parcel moving through the room, and feedback on every verdict. Milestone 2 (the two desks) is built and its solo side is approved. The server side of everything with two or more players is checked by a simulation, but nothing has been played by two real people yet. Saving is not built.
+Milestones 3 and 4 of 6 are built and waiting for a playtest. Milestone 3 is the ping board, the parcel moving through the room, and feedback on every verdict. Milestone 4 is the rule of the day, the odd parcel, the postal licence, the collection book, and saving. Milestone 2 (the two desks) is built and its solo side is approved.
+
+Two things are checked only by simulation so far. Nothing has been played by two real people yet, and saving has not run against Roblox's real data store, which needs the place to be published.
 
 ## The toolchain
 
@@ -75,7 +77,7 @@ While a shift is running, the desk is either empty or holds exactly one parcel w
 
 The server splits what it knows in two:
 
-- **Public state**: phase, time the shift ends, mistakes, correct count, the number of the parcel on the desk, and a number that goes up each time the rules are picked. Sent to every player whenever it changes.
+- **Public state**: phase, time the shift ends, mistakes, correct count, the number of the parcel on the desk, a number that goes up each time the rules are picked, and the rule of the day. Sent to every player whenever it changes.
 - **Hidden state**: the rules and what is inside the parcel. Sent only through two dedicated messages, and only to players entitled to them: the rulebook to the Clerk desk, the contents to the Scanner desk.
 
 ### The desks (`src/server/DeskService.luau`, `src/server/DeskPlan.luau`)
@@ -96,13 +98,13 @@ A lone player is sent both halves of the hidden information, because they are en
 
 ### Parcels and rules as data (`src/shared/ParcelDefs.luau`, `src/shared/RuleDefs.luau`)
 
-A parcel holds one of six items in one of four colours. Each item has a fixed shape and number of handles. A rule is a row that names a trait value, such as "two handles" or "red", and sends anything matching it back. A parcel that matches no rule is shipped.
+A parcel holds one of six ordinary items, or now and then the odd one, in one of four colours. Each item has a fixed shape and number of handles. A rule is a row that names a trait value, such as "two handles" or "red", and sends anything matching it back. A parcel that matches no rule is shipped.
 
 Adding an item, a colour, or a rule means adding a row to a table. No logic changes.
 
 ### Choosing rules and parcels (`src/server/Rulebook.luau`, `src/server/ParcelGenerator.luau`)
 
-At the start of a shift the server picks three rules at random. It then lists all 24 possible parcels and sorts them into two piles: those the rules ship and those the rules send back. If either pile is empty it picks different rules.
+At the start of a shift the server takes the rule of the day and picks two more at random. It then lists every ordinary parcel there could be (six items in four colours, so 24) and sorts them into two piles: those the rules ship and those the rules send back. If either pile is empty it picks different rules.
 
 For each new parcel the server first decides whether it should be a "send back" (half the time), then picks a random parcel from that pile. This keeps the game balanced whatever the rules are.
 
@@ -118,6 +120,7 @@ Both files are server-only. If the client could run them, it could work out the 
 | `VerdictJudged` | server to all | Parcel number, the verdict given, whether it was right |
 | `DeskSync` | server to a player | That player's desk, whether they are alone, whether they may stamp, and their rulebook time |
 | `PingShown` | server to all | One stamp on the ping board: who sent it, which stamp, and whatever the server attached |
+| `ProgressSync` | server to a player | That player's licence and collection book, and whether they are being saved |
 | `SubmitVerdict` | client to server | Parcel number and "Ship" or "Return" |
 | `RequestShift` | client to server | Nothing; asks for a new shift |
 | `RequestSwitch` | client to server | Nothing; a lone player asks to move to the other desk |
@@ -144,6 +147,36 @@ A player may send four stamps in a row and then one a second, which is enough fo
 The stamps are rows in a data module. Adding one is adding a row.
 
 This design was built without the paper test the design report asked for (two friends who stay silent, to see whether they can solve a rule in 20 seconds). It still needs that test with real people.
+
+### The rule of the day and the odd parcel (`src/server/Rulebook.luau`, `src/server/Calendar.luau`, `src/server/ParcelGenerator.luau`)
+
+Every shift has three rules. The first is the rule of the day: it is worked out from the date alone, so it is the same for every player in the world that day and different tomorrow. Unlike the other two rules it is shown to both desks. It could not have been kept secret anyway, because this code is public and anyone could work it out from the date; so the game makes it something everyone knows, and a reason to look in each day. The other two rules are picked at random and stay with the Clerk.
+
+"Today" is always the server's clock in UTC, never a player's device, and it is fixed when the shift starts.
+
+About one parcel in 25 holds the odd item, a Singing Snow Globe. It is judged by the rules like anything else. It is a small surprise that is earned in play and costs nothing.
+
+### Saved progress (`src/server/PlayerData.luau`)
+
+Two things are kept between visits.
+
+- **The postal licence.** A card with six stamp slots. A new player's first stamp is a gift, so the card never starts empty. One more is earned on any day the player is at a desk for ten correctly handled parcels in one shift. It arrives the moment the tenth is handled, not at the end, so leaving early does not lose it and joining at the last second does not win it. Missing a day loses nothing; there are no streaks. A seventh stamp starts a new card.
+- **The collection book.** One slot for each kind of item, filled the first time the player's team handles that item correctly.
+
+Roblox stores this in a DataStore, its key-value save system, and a call to it can fail or be slow at any time. The rules the code follows:
+
+- If a player's data cannot be loaded after four tries, the player still plays, on a fresh card that lasts only for that visit, and is told it is not being saved. That player is never saved. Writing a fresh card over real progress is the one mistake that cannot be undone.
+- A save never replaces what is stored. It reads the stored copy and adds to it: the licence that is further along wins, the collections are joined, and finished shifts are added on. So if a player has already hopped to another server and earned something there, neither server can undo the other.
+- Only one save runs at a time for a player. A second request made meanwhile waits and then runs once.
+- A failed save is tried again, waiting longer each time.
+- Progress is saved when a stamp is earned, when the player leaves, and once a minute if anything has changed. A stamp earned within 15 seconds of the last save waits for the next of those, so a burst of rewards is not a burst of writes.
+- If the save made when a player leaves fails every try, their progress is kept on the server and tried again each minute and at shutdown.
+- When the server shuts down it saves everyone at once, including those players, and keeps trying whatever fails until a deadline.
+- Data saved by a newer version of the game is shown but never written, and item ids this version does not know are kept in what it writes. So during an update, a server still running old code cannot erase what a new one saved.
+- Studio playtests use a separate store, so test settings can never change real players' progress.
+- Whatever comes back from the store is checked field by field before it is used, so damaged or out-of-date data is repaired instead of trusted.
+
+All of this is tested in the simulation against a stand-in store that can be told to fail or be slow. It has not yet run against Roblox's real store, because that needs the place to be published.
 
 ### What the player's device keeps (`src/client/ShiftClient.luau`)
 
@@ -249,24 +282,31 @@ Where the type says "any element", the code only shows, hides, or recolours it, 
 | `PingBar.StampTemplate` | TextButton, hidden | Copied once per stamp |
 | `PingFeed` | any element with a layout sorted by LayoutOrder | Holds the most recent pings. Put no other TextLabel in it. |
 | `PingFeed.PingTemplate` | TextLabel, hidden | Copied once per ping |
+| `EndPanel` | any element | Shown when the shift ends |
+| `EndPanel.EndTitle` | TextLabel | Result heading |
+| `EndPanel.EndSummary` | TextLabel | Score |
+| `EndPanel.PlayAgainButton` | TextButton | Starts a new shift |
+| `EndPanel.LicenceLabel` | TextLabel | How many stamps are on the licence card |
+| `EndPanel.LicenceCard` | any element with a layout sorted by LayoutOrder | Holds one slot per stamp |
+| `EndPanel.LicenceCard.SlotTemplate` | TextLabel, hidden | Copied once per slot; a stamped slot gets a tick and its background is coloured by code |
+| `EndPanel.CollectionBook` | any element with a layout sorted by LayoutOrder | Holds one label per kind of item |
+| `EndPanel.CollectionBook.ItemTemplate` | TextLabel, hidden | Copied once per item; shows its name once found, and its background is coloured by code |
+| `EndPanel.SaveNotice` | TextLabel | Shown when this visit's progress is not being saved |
+| `DailyLabel` | TextLabel | The rule of the day, shown to both desks while a shift runs |
 
 `ServerScriptService` attributes (Studio only, all optional):
 
 | Name | Type | Used for |
 |---|---|---|
 | `Test_<Key>` | number | Overrides the setting `<Key>` from `src/server/Config.luau` for playtests, for example `Test_ShiftSeconds`. Ignored on live servers. |
-| `EndPanel` | any element | Shown when the shift ends |
-| `EndPanel.EndTitle` | TextLabel | Result heading |
-| `EndPanel.EndSummary` | TextLabel | Score |
-| `EndPanel.PlayAgainButton` | TextButton | Starts a new shift |
 
 `SoundService.Sfx` (a Folder of Sounds, all optional):
 
 | Name | Plays when |
 |---|---|
 | `Arrive` | A parcel rides in |
-| `Stamp` | Any verdict is given |
+| `Stamp` | Any verdict is given, and when a licence stamp is earned |
 | `Mistake` | The verdict was wrong |
 | `Correct` | The verdict was right (not there yet) |
 | `Ping` | Anyone sends a stamp |
-| `NewRules` | The rulebook changes in the middle of a shift |
+| `NewRules` | The rulebook changes in the middle of a shift, and when the odd parcel arrives |
