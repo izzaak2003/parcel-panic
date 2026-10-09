@@ -24,4 +24,5 @@ return table.freeze({
 	ParcelGap = tuned("ParcelGap", 1.5), -- a verdict to the next parcel
 	ReturnChance = tuned("ReturnChance", 0.5), -- share of parcels that should go back
 	RequestCooldown = tuned("RequestCooldown", 0.25), -- shortest gap between requests from one player
+	PeekSeconds = tuned("PeekSeconds", 15), -- solo: rulebook time allowed per parcel
 })

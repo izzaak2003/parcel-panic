@@ -17,8 +17,10 @@ return table.freeze({
 	RulebookShown = event("RulebookShown"), -- (ruleIds: { string }) the rules for this shift
 	ParcelScanned = event("ParcelScanned"), -- (seq: number, contents: Contents) what is inside the parcel
 	VerdictJudged = event("VerdictJudged"), -- (seq: number, verdict: Verdict, wasCorrect: boolean)
+	DeskSync = event("DeskSync"), -- (state: DeskState) this player's own desk, sent whenever it changes
 
 	-- Client to server. These are requests; the server checks every one.
 	SubmitVerdict = event("SubmitVerdict"), -- (seq: number, verdict: Verdict)
 	RequestShift = event("RequestShift"), -- () start a new shift after one has ended
+	RequestSwitch = event("RequestSwitch"), -- () solo only: move to the other desk
 })

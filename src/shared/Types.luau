@@ -14,6 +14,18 @@ export type Contents = {
 	handles: number,
 }
 
+-- The Scanner desk shows what is inside the parcel. The Clerk desk shows the rulebook.
+export type Desk = "Scanner" | "Clerk"
+
+-- What one player needs to know about their own desk. Sent only to that player.
+export type DeskState = {
+	desk: Desk,
+	solo: boolean, -- alone in the server, so this player works both desks and may switch
+	canStamp: boolean, -- whether this player may give the verdict
+	peekLeft: number, -- solo: seconds of rulebook time left for this parcel
+	peekEndsAt: number, -- solo: server clock time the rulebook closes, or 0 while it is shut
+}
+
 export type Phase = "Waiting" | "Running" | "Ended"
 export type EndReason = "TimeUp" | "StruckOut"
 

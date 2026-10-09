@@ -13,8 +13,10 @@
         "RulebookShown": { "$className": "RemoteEvent" },
         "ParcelScanned": { "$className": "RemoteEvent" },
         "VerdictJudged": { "$className": "RemoteEvent" },
+        "DeskSync": { "$className": "RemoteEvent" },
         "SubmitVerdict": { "$className": "RemoteEvent" },
-        "RequestShift": { "$className": "RemoteEvent" }
+        "RequestShift": { "$className": "RemoteEvent" },
+        "RequestSwitch": { "$className": "RemoteEvent" }
       }
     },
 
