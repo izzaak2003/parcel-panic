@@ -1,0 +1,12 @@
+# Rojo
+*.rbxl.lock
+*.rbxlx.lock
+sourcemap.json
+
+# Editors / OS
+.vscode/
+Thumbs.db
+.DS_Store
+
+# Claude Code per-machine settings
+.claude/settings.local.json
