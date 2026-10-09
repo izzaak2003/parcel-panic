@@ -50,12 +50,22 @@ If the schedule slips, cut the collection book first, then the odd parcel.
 
 Open design questions, to settle in the milestone named:
 
-- Week 2: how three and four players share two desks. Proposal: extra players double up on a desk.
-- Week 2: there is one shift per server, so a player who joins late inherits its mistakes and remaining time, or lands on someone else's results panel. Decide this together with desk assignment. Desk assignment must be held on the server per UserId for the whole shift, or a player can rejoin and collect both halves.
+- Week 4: set the experience's maximum players to 4 when the place is published.
+- Week 5: a player who joins late inherits the running shift's mistakes and remaining time, or lands on someone else's results panel. Decide what a joiner sees along with the cold open.
 - Before week 3: the eight stamps carry no values, so a "colour" stamp cannot say "red". Isaac tests the board on paper with two silent friends before it is built.
 - Week 3: in the room a shipped parcel leaves to the right and a returned one goes back down the chute, but the Ship button is on the left of the screen. Line the two up when verdicts start moving the parcel.
+- Week 3: a re-deal (someone joined or left) is silent: the parcel vanishes and the Clerk's rules change with no cue. Give it one with the verdict feedback.
+- Week 4: a re-deal discards a parcel at no cost, so do not reward low-mistake shifts without counting discards, and keep the rule of the day across a re-deal.
 - Week 3: verdict feedback must ignore verdicts that were judged while a joining player was still loading; those replay all at once when the client connects.
 - Week 4: the repo is public, so anything seeded only from the date can be worked out by anyone. Date-seed only the rule of the day, which every player learns anyway, and keep the other rules and the parcels on a separate unseeded generator.
+
+## Design decisions made so far
+
+- With two or more players only the Clerk desk gives the verdict, so the Scanner has to pass on what is inside for every parcel. A player alone works both desks and may stamp from either.
+- Extra players double up on a desk: three players is two Scanners and a Clerk.
+- A player alone starts at the X-ray and may open the rulebook for 15 seconds per parcel. Unused time is kept; it refills with each parcel.
+- Whenever someone joins or leaves and two or more players remain, the server deals new rules and replaces the parcel on the desk. This is what keeps the halves apart across a change of team, in place of remembering seats per player.
+- Players are stood at their desk and cannot walk. The camera is fixed at a marker part per desk.
 
 ## Monetization
 
