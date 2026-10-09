@@ -52,14 +52,26 @@ end
 
 -- Everything the server sends lands here, in order.
 local sent = {}
+local dealSeenBy = {}
 local function remote(name)
 	local self = { Name = name, OnServerEvent = signal() }
+	-- Each entry also notes which rulebook was in force for that player when it
+	-- was sent, going by the last public state they were given.
+	local function record(player, args)
+		if name == "ShiftSync" then
+			dealSeenBy[player.Name] = args[1].deal
+		end
+		table.insert(
+			sent,
+			{ to = player.Name, remote = name, args = args, deal = dealSeenBy[player.Name] }
+		)
+	end
 	function self:FireClient(player, ...)
-		table.insert(sent, { to = player.Name, remote = name, args = table.pack(...) })
+		record(player, table.pack(...))
 	end
 	function self:FireAllClients(...)
 		for _, player in players.list do
-			table.insert(sent, { to = player.Name, remote = name, args = table.pack(...) })
+			record(player, table.pack(...))
 		end
 	end
 	return self
@@ -79,7 +91,72 @@ local quick = {
 	RequestCooldown = 0,
 	PeekSeconds = 0.4,
 	PingBurst = 1000, -- lowered to the real value where the limit itself is tested
+	StampParcels = 2,
+	OddChance = 0, -- raised to 1 where the odd parcel is tested
+	SaveBackoff = 0.02,
+	SaveGap = 0, -- raised where the gap between saves is tested
+	AutosaveSeconds = 100000, -- saving is triggered by hand in these tests
+	ShutdownSeconds = 3,
 }
+
+-- A stand-in for Roblox's data store that can be told to fail or be slow.
+local function deepCopy(value)
+	if typeof(value) ~= "table" then
+		return value
+	end
+	local result = {}
+	for key, inner in value do
+		result[key] = deepCopy(inner)
+	end
+	return result
+end
+local saved = {} -- what is "stored", by key
+local storeLog = { gets = 0, updates = 0, overlapped = false }
+local storeFaults = { gets = 0, updates = 0, delay = 0, landThenFail = 0, runTwice = 0 } -- how many coming calls fail; seconds each call takes
+local updatesInFlight = {}
+local fakeStore = {}
+function fakeStore:GetAsync(key)
+	storeLog.gets += 1
+	if storeFaults.delay > 0 then
+		task.wait(storeFaults.delay)
+	end
+	if storeFaults.gets > 0 then
+		storeFaults.gets -= 1
+		error("fake data store: GetAsync failed")
+	end
+	return deepCopy(saved[key])
+end
+function fakeStore:UpdateAsync(key, transform)
+	storeLog.updates += 1
+	updatesInFlight[key] = (updatesInFlight[key] or 0) + 1
+	if updatesInFlight[key] > 1 then
+		storeLog.overlapped = true
+	end
+	if storeFaults.delay > 0 then
+		task.wait(storeFaults.delay)
+	end
+	updatesInFlight[key] -= 1
+	if storeFaults.updates > 0 then
+		storeFaults.updates -= 1
+		error("fake data store: UpdateAsync failed")
+	end
+	-- The real store may run the function more than once before it settles.
+	if storeFaults.runTwice > 0 then
+		storeFaults.runTwice -= 1
+		transform(deepCopy(saved[key]))
+	end
+	local result = transform(deepCopy(saved[key]))
+	if result ~= nil then
+		saved[key] = deepCopy(result)
+	end
+	-- The write happened, but the caller is told it did not.
+	if storeFaults.landThenFail > 0 then
+		storeFaults.landThenFail -= 1
+		error("fake data store: UpdateAsync landed, then reported failure")
+	end
+	return result
+end
+local closers = {} -- functions the game asked to run when the server closes
 
 -- Module loader: `script.Parent.X` and `ReplicatedStorage.Shared.X` both become
 -- the name "X", and `require` loads that module's Source with fake services.
@@ -94,8 +171,17 @@ function fakeGame:GetService(name)
 		return players
 	elseif name == "ReplicatedStorage" then
 		return { Shared = names }
+	elseif name == "DataStoreService" then
+		return {
+			GetDataStore = function()
+				return fakeStore
+			end,
+		}
 	end
 	return game:GetService(name)
+end
+function fakeGame:BindToClose(closer)
+	table.insert(closers, closer)
 end
 
 local sources = {}
@@ -174,6 +260,15 @@ local function count(to, remoteName, from)
 	end
 	return total
 end
+local function lastEntry(to, remoteName)
+	for index = #sent, 1, -1 do
+		local entry = sent[index]
+		if entry.to == to and entry.remote == remoteName then
+			return entry
+		end
+	end
+	return nil
+end
 local function last(to, remoteName)
 	for index = #sent, 1, -1 do
 		local entry = sent[index]
@@ -190,9 +285,6 @@ end
 local function shift(name)
 	local args = last(name, "ShiftSync")
 	return args and args[1]
-end
-local function rulesKey(args)
-	return args and table.concat(args[1], ",") or "none"
 end
 
 -- The rulebook in force is the last one sent to anybody.
@@ -211,16 +303,15 @@ local function checkSplit(when)
 	if #players.list < 2 then
 		return
 	end
-	local rules = rulesKey(currentRules())
 	for _, player in players.list do
 		local own = desk(player.Name)
 		local state = shift(player.Name)
 		if own and state and state.phase == "Running" then
 			if own.desk == "Scanner" then
-				local holds = rulesKey(last(player.Name, "RulebookShown"))
+				local entry = lastEntry(player.Name, "RulebookShown")
 				check(
 					when .. ": Scanner " .. player.Name .. " does not hold the rulebook in force",
-					holds ~= rules
+					entry == nil or entry.deal ~= state.deal
 				)
 			else
 				local scan = last(player.Name, "ParcelScanned")
@@ -238,11 +329,11 @@ end
 
 -- Acting as players.
 local nextId = 0
-local function join(name)
+local function join(name, userId)
 	nextId += 1
 	local player = {
 		Name = name,
-		UserId = nextId,
+		UserId = userId or nextId,
 		Parent = players,
 		Character = nil,
 		CharacterAdded = signal(),
@@ -277,6 +368,8 @@ local function rightVerdict()
 	return "Ship"
 end
 
+local PlayerData = load("PlayerData")
+PlayerData.start()
 load("ShiftService").start()
 load("PingService").start()
 
@@ -580,5 +673,353 @@ ping(c, "colour")
 check("a lone player's stamps go nowhere", count("C", "PingShown", m) == 0)
 
 leave(c)
+
+section("the rule of the day, the odd parcel, and saved progress")
+local Calendar = load("Calendar")
+local ParcelDefs = load("ParcelDefs")
+local function keyOf(player)
+	return "u_" .. player.UserId
+end
+local function progress(name)
+	local args = last(name, "ProgressSync")
+	return args and args[1]
+end
+local function size(list)
+	local total = 0
+	for _ in list do
+		total += 1
+	end
+	return total
+end
+-- Every stamp a player has, counting filled cards.
+local function stampsOf(name)
+	local shown = progress(name)
+	return shown.licence.cards * shown.licenceSlots + shown.licence.stamps
+end
+-- Handles so many parcels correctly in the running shift, alone.
+local function handle(player, right)
+	for _ = 1, right do
+		settleDown()
+		stamp(player, shift(player.Name).parcelSeq, rightVerdict())
+		task.wait(0.02)
+	end
+end
+-- Ends the running shift with mistakes.
+local function strikeOut(player)
+	for _ = 1, 10 do
+		settleDown()
+		if shift(player.Name).phase ~= "Running" then
+			break
+		end
+		stamp(
+			player,
+			shift(player.Name).parcelSeq,
+			if rightVerdict() == "Ship" then "Return" else "Ship"
+		)
+		task.wait(0.02)
+	end
+end
+local function newShift(player)
+	strikeOut(player)
+	remotes.RequestShift.OnServerEvent:Fire(player)
+	settleDown()
+end
+
+local d = join("D")
+settleDown()
+check(
+	"a new player starts with one free stamp and is told progress is being saved",
+	progress("D") ~= nil and stampsOf("D") == 1 and progress("D").saving == true
+)
+
+newShift(d)
+local today = Calendar.today()
+check(
+	"the rule of the day is public, is the first rule in the book, and follows from the date",
+	shift("D").dailyRuleId == currentRules()[1][1]
+		and shift("D").dailyRuleId == Rulebook.daily(today).id
+)
+handle(d, config.StampParcels - 1)
+check("one parcel short of the mark earns no stamp", stampsOf("D") == 1)
+handle(d, 1)
+check("the stamp is earned the moment the player has handled enough", stampsOf("D") == 2)
+check("what was handled correctly goes in the collection book", size(progress("D").collection) >= 1)
+task.wait(0.1)
+check("earning a stamp is saved", saved[keyOf(d)] ~= nil and saved[keyOf(d)].licence.stamps == 2)
+handle(d, config.StampParcels)
+check("handling more on the same day earns no second stamp", stampsOf("D") == 2)
+newShift(d)
+handle(d, config.StampParcels)
+check("nor does a second shift on the same day", stampsOf("D") == 2)
+
+config.DayOffset += 1
+newShift(d)
+check(
+	"the next day has its own rule of the day",
+	shift("D").dailyRuleId == Rulebook.daily(today + 1).id
+)
+handle(d, config.StampParcels)
+check("the next day earns another stamp", stampsOf("D") == 3)
+
+config.OddChance = 1
+newShift(d)
+settleDown()
+local oddSeen = last("D", "ParcelScanned")[2]
+check("the odd parcel turns up", ParcelDefs.ItemsById[oddSeen.item].odd == true, oddSeen.item)
+stamp(d, shift("D").parcelSeq, rightVerdict())
+task.wait(0.05)
+check(
+	"handled correctly, it goes in the collection book",
+	progress("D").collection[oddSeen.item] == true
+)
+config.OddChance = quick.OddChance
+
+local dId = d.UserId
+leave(d)
+settleDown()
+d = join("D", dId)
+settleDown()
+check(
+	"coming back loads what was saved",
+	progress("D").saving and stampsOf("D") == 3 and progress("D").collection[oddSeen.item] == true
+)
+
+-- Days far in the future, so each call below earns a stamp whatever came before.
+local farDay = today + 1000
+local function nextDay()
+	farDay += 1
+	return farDay
+end
+
+-- Another server saved in the meantime.
+local key = keyOf(d)
+saved[key].collection.trophy = true
+saved[key].collection.candle = true
+saved[key].licence = { stamps = 2, cards = 1, lastStampDay = saved[key].licence.lastStampDay }
+PlayerData.stamp(d, nextDay())
+task.wait(0.1)
+check(
+	"a save adds to what another server stored and never replaces it",
+	saved[key].collection.trophy == true
+		and saved[key].collection.candle == true
+		and saved[key].collection[oddSeen.item] == true
+		and saved[key].licence.cards == 1
+)
+check(
+	"the player is then shown the combined progress",
+	progress("D").licence.cards == 1 and progress("D").collection.trophy == true
+)
+
+local stampsNow = stampsOf("D")
+storeFaults.updates = 2
+local updatesBefore = storeLog.updates
+PlayerData.stamp(d, nextDay())
+task.wait(0.3)
+check(
+	"a save that fails is tried again until it works",
+	storeLog.updates - updatesBefore == 3
+		and saved[key].licence.cards * 6 + saved[key].licence.stamps == stampsNow + 1,
+	(storeLog.updates - updatesBefore) .. " calls"
+)
+
+storeFaults.delay = 0.1
+storeLog.overlapped = false
+PlayerData.stamp(d, nextDay())
+PlayerData.stamp(d, nextDay())
+PlayerData.stamp(d, nextDay())
+task.wait(0.7)
+storeFaults.delay = 0
+check(
+	"three saves asked for at once run one after another and lose nothing",
+	not storeLog.overlapped
+		and saved[key].licence.cards * 6 + saved[key].licence.stamps == stampsNow + 4,
+	"stored "
+		.. (saved[key].licence.cards * 6 + saved[key].licence.stamps)
+		.. ", expected "
+		.. (stampsNow + 4)
+)
+
+-- Fill the card, then one more.
+while progress("D").licence.stamps < 6 do
+	PlayerData.stamp(d, nextDay())
+end
+local cardsBefore = progress("D").licence.cards
+PlayerData.stamp(d, nextDay())
+check(
+	"a stamp on a full card starts a new card",
+	progress("D").licence.cards == cardsBefore + 1 and progress("D").licence.stamps == 1
+)
+task.wait(0.1)
+
+-- A write that lands but is reported as failed, and a write whose function runs twice.
+storeFaults.landThenFail = 1
+PlayerData.stamp(d, nextDay())
+task.wait(0.2)
+local afterLanded = saved[key].licence.cards * 6 + saved[key].licence.stamps
+storeFaults.runTwice = 1
+PlayerData.stamp(d, nextDay())
+task.wait(0.2)
+check(
+	"a save that landed but reported failure, and one run twice, each count once",
+	afterLanded == stampsOf("D") - 1
+		and saved[key].licence.cards * 6 + saved[key].licence.stamps == stampsOf("D"),
+	"stored "
+		.. (saved[key].licence.cards * 6 + saved[key].licence.stamps)
+		.. ", shown "
+		.. stampsOf("D")
+)
+
+-- With a gap required between saves, a second award waits for the autosave or for leaving.
+config.SaveGap = 15
+updatesBefore = storeLog.updates
+PlayerData.stamp(d, nextDay())
+task.wait(0.1)
+check("a stamp just after a save is not written at once", storeLog.updates == updatesBefore)
+local owedStamps = stampsOf("D")
+leave(d)
+task.wait(0.1)
+check(
+	"but leaving writes it",
+	saved[key].licence.cards * 6 + saved[key].licence.stamps == owedStamps
+)
+config.SaveGap = quick.SaveGap
+
+storeFaults.gets = 100000
+local e = join("E")
+task.wait(0.5)
+check(
+	"a player whose data will not load plays on with a fresh card and is told it is not being saved",
+	progress("E") ~= nil and progress("E").saving == false and stampsOf("E") == 1
+)
+updatesBefore = storeLog.updates
+PlayerData.collect(e, "ball")
+PlayerData.stamp(e, nextDay())
+task.wait(0.1)
+leave(e)
+task.wait(0.1)
+check(
+	"and is never saved, so a fresh card cannot overwrite real data",
+	storeLog.updates == updatesBefore and saved[keyOf(e)] == nil
+)
+storeFaults.gets = 0
+
+saved.u_777 = {
+	version = 1,
+	licence = { stamps = 4, cards = 0, lastStampDay = 5 },
+	collection = { ball = true },
+}
+storeFaults.gets = 2
+join("F", 777)
+task.wait(0.3)
+check(
+	"a load that fails twice and then works is used",
+	progress("F").saving == true and stampsOf("F") == 4 and progress("F").collection.ball == true
+)
+
+storeFaults.delay = 0.3
+local g = join("G")
+task.wait(0.05)
+leave(g)
+task.wait(0.5)
+storeFaults.delay = 0
+check(
+	"a player who leaves while their data is loading is sent nothing and saves nothing",
+	count("G", "ProgressSync") == 0 and saved[keyOf(g)] == nil
+)
+
+saved.u_888 = {
+	licence = { stamps = "lots", cards = -5, lastStampDay = 0 / 0 },
+	collection = { nope = true, ball = "yes", teapot = true },
+}
+local h = join("H", 888)
+saved.u_889 = "garbage"
+join("I", 889)
+task.wait(0.1)
+local repaired = progress("H")
+check(
+	"damaged stored data is repaired field by field, not trusted",
+	repaired.saving
+		and repaired.licence.stamps == 1
+		and repaired.licence.cards == 0
+		and repaired.licence.lastStampDay == 0
+		and repaired.collection.teapot == true
+		and repaired.collection.nope == nil
+		and repaired.collection.ball == nil
+)
+check(
+	"stored data that is not a save at all gives a fresh card",
+	stampsOf("I") == 1 and progress("I").saving
+)
+
+-- A date in the future must not lock a player out of stamps.
+saved.u_891 =
+	{ version = 1, licence = { stamps = 2, cards = 0, lastStampDay = 10 ^ 9 }, collection = {} }
+local l = join("L", 891)
+task.wait(0.1)
+PlayerData.stamp(l, Calendar.today())
+check(
+	"a stored date in the future is thrown away, so today's stamp can still be earned",
+	stampsOf("L") == 3
+)
+
+-- Saved by a newer version of the game: shown, never written.
+saved.u_890 = {
+	version = 99,
+	licence = { stamps = 5, cards = 0, lastStampDay = 1 },
+	collection = { ball = true },
+	somethingNew = "kept",
+}
+local j = join("J", 890)
+task.wait(0.1)
+check(
+	"data from a newer version of the game is shown but marked as not being saved",
+	stampsOf("J") == 5 and progress("J").saving == false
+)
+PlayerData.collect(j, "teapot")
+leave(j)
+task.wait(0.1)
+check(
+	"and is left exactly as it was",
+	saved.u_890.version == 99
+		and saved.u_890.somethingNew == "kept"
+		and saved.u_890.collection.teapot == nil
+)
+
+-- A player leaves while the store is down, then the server closes.
+local k = join("K", 892)
+task.wait(0.1)
+PlayerData.collect(k, "ball")
+storeFaults.updates = config.SaveAttempts
+leave(k)
+task.wait(0.4)
+check(
+	"a save on leaving that fails every try is not lost track of",
+	saved.u_892 == nil or saved.u_892.collection.ball == nil
+)
+
+PlayerData.collect(h, "lantern")
+storeFaults.delay = 0.1
+local closed = false
+for _, closer in closers do
+	task.spawn(function()
+		closer()
+		closed = true
+	end)
+end
+task.wait(1.2)
+storeFaults.delay = 0
+check(
+	"closing the server saves unsaved progress and waits for it to finish",
+	closed and saved.u_888 ~= nil and saved.u_888.collection.lantern == true
+)
+check(
+	"and writes what the departed player was owed",
+	saved.u_892 ~= nil and saved.u_892.collection.ball == true
+)
+check(
+	"an item id this version does not know survives a save",
+	saved.u_888.collection.nope == true and saved.u_888.collection.teapot == true
+)
+
 table.insert(lines, ("%d checks, %d failed, %d messages sent"):format(checks, failures, #sent))
 return table.concat(lines, "\n")
