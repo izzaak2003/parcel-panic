@@ -25,4 +25,6 @@ return table.freeze({
 	ReturnChance = tuned("ReturnChance", 0.5), -- share of parcels that should go back
 	RequestCooldown = tuned("RequestCooldown", 0.25), -- shortest gap between requests from one player
 	PeekSeconds = tuned("PeekSeconds", 15), -- solo: rulebook time allowed per parcel
+	PingBurst = tuned("PingBurst", 4), -- stamps a player may send in a row: three traits and one more
+	PingPerSecond = tuned("PingPerSecond", 1), -- how fast that allowance refills
 })

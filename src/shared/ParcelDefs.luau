@@ -29,6 +29,10 @@ local colourSwatches: { [Types.Colour]: Color3 } = {
 	Yellow = Color3.fromRGB(245, 205, 66),
 }
 
+-- How a number of handles is written on screen.
+local handleText: { [number]: string } =
+	{ [0] = "No handles", [1] = "One handle", [2] = "Two handles" }
+
 local itemsById: { [string]: ItemDef } = {}
 for _, item in items do
 	itemsById[item.id] = item
@@ -39,4 +43,5 @@ return table.freeze({
 	ItemsById = itemsById,
 	Colours = colours,
 	ColourSwatches = colourSwatches,
+	HandleText = handleText,
 })

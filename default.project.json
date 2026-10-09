@@ -14,6 +14,8 @@
         "ParcelScanned": { "$className": "RemoteEvent" },
         "VerdictJudged": { "$className": "RemoteEvent" },
         "DeskSync": { "$className": "RemoteEvent" },
+        "PingShown": { "$className": "RemoteEvent" },
+        "SendPing": { "$className": "RemoteEvent" },
         "SubmitVerdict": { "$className": "RemoteEvent" },
         "RequestShift": { "$className": "RemoteEvent" },
         "RequestSwitch": { "$className": "RemoteEvent" }

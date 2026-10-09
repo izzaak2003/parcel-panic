@@ -66,6 +66,14 @@ function DeskService.sees(player: Player, desk: Types.Desk): boolean
 	return own ~= nil and (isSolo() or own == desk)
 end
 
+function DeskService.isSolo(): boolean
+	return isSolo()
+end
+
+function DeskService.deskOf(player: Player): Types.Desk?
+	return desks[player]
+end
+
 function DeskService.canStamp(player: Player): boolean
 	local own = desks[player]
 	return own ~= nil and (isSolo() or own == "Clerk")

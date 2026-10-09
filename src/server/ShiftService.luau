@@ -12,7 +12,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(script.Parent.Config)
 local DeskService = require(script.Parent.DeskService)
 local ParcelGenerator = require(script.Parent.ParcelGenerator)
-local ParcelProp = require(script.Parent.ParcelProp)
 local RateLimit = require(script.Parent.RateLimit)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local RuleDefs = require(ReplicatedStorage.Shared.RuleDefs)
@@ -30,13 +29,17 @@ local endsAt = 0
 local strikes = 0
 local correct = 0
 
--- Hidden state. It leaves the server only through showRulebook and showParcel.
+-- Hidden state. The server sends it only through showRulebook and showParcel.
+-- The ping board can pass on one piece of it at a time, when the player who
+-- holds it chooses to share it.
 local rules: { RuleDefs.Rule } = {}
 local deck: ParcelGenerator.Deck? = nil
 local parcel: Types.Contents? = nil -- the parcel on the desk, or nil when the desk is empty
 -- Counts every parcel since the server started and never resets, so a request
 -- about an old parcel can never match a new one.
 local parcelSeq = 0
+-- Goes up each time rules are picked, so clients can tell a new rulebook from the old.
+local deal = 0
 
 local startTimer: thread? = nil
 local endTimer: thread? = nil
@@ -50,6 +53,7 @@ local function publicState(): Types.PublicShiftState
 		strikes = strikes,
 		correct = correct,
 		parcelSeq = if parcel then parcelSeq else 0,
+		deal = deal,
 		endReason = endReason,
 	}
 end
@@ -95,7 +99,6 @@ local function endShift(reason: Types.EndReason)
 	phase = "Ended"
 	endReason = reason
 	parcel = nil
-	ParcelProp.hide()
 	broadcast()
 	DeskService.closePeek()
 end
@@ -107,7 +110,6 @@ local function putParcelOnDesk()
 	end
 	parcelSeq += 1
 	parcel = ParcelGenerator.draw(currentDeck, rng, Config.ReturnChance)
-	ParcelProp.show()
 	broadcast()
 	for _, player in Players:GetPlayers() do
 		showParcel(player)
@@ -142,6 +144,7 @@ end
 local function startShift()
 	cancelTimers()
 	rules, deck = chooseRules()
+	deal += 1
 	phase = "Running"
 	endReason = nil
 	strikes = 0
@@ -174,8 +177,8 @@ local function onRosterChanged(playerCount: number)
 		return
 	end
 	rules, deck = chooseRules()
+	deal += 1
 	parcel = nil
-	ParcelProp.hide()
 	queueParcel(Config.ParcelGap)
 end
 
@@ -194,7 +197,6 @@ local function onSubmitVerdict(player: Player, seq: unknown, verdict: unknown)
 
 	-- Clear the desk before anything else, so a repeat of this request is rejected.
 	parcel = nil
-	ParcelProp.hide()
 
 	local wasCorrect = verdict == Rulebook.judge(rules, judged)
 	if wasCorrect then
@@ -233,6 +235,53 @@ local function onDeskChanged(player: Player)
 			startShift()
 		end)
 	end
+end
+
+function ShiftService.isRunning(): boolean
+	return phase == "Running"
+end
+
+-- Which rulebook is in force, and which parcel is on the desk (0 for none).
+-- Both are public: they are part of the state every player gets.
+function ShiftService.currentDeal(): number
+	return deal
+end
+
+function ShiftService.parcelOnDesk(): number
+	return if parcel then parcelSeq else 0
+end
+
+-- The two functions below hand out hidden state for the ping board. Each checks
+-- for itself that `player` is entitled to it, so no caller can leak by forgetting.
+
+-- One trait of parcel number `seq`, if it is the one on the desk and this player
+-- may see inside it. The server, not the client, says what the parcel is.
+function ShiftService.traitFor(player: Player, trait: Types.Trait, seq: number): (string | number)?
+	local current = parcel
+	if phase ~= "Running" or not current or seq ~= parcelSeq then
+		return nil
+	end
+	if not DeskService.sees(player, "Scanner") then
+		return nil
+	end
+	if trait == "colour" then
+		return current.colour
+	elseif trait == "shape" then
+		return current.shape
+	elseif trait == "handles" then
+		return current.handles
+	end
+	return nil
+end
+
+-- The id of the rule at this place in the rulebook, if there is one and this
+-- player may read the rulebook. `index` comes from a client and may be any number.
+function ShiftService.ruleIdFor(player: Player, index: number): string?
+	if phase ~= "Running" or not DeskService.sees(player, "Clerk") then
+		return nil
+	end
+	local rule = rules[index]
+	return if rule then rule.id else nil
 end
 
 function ShiftService.start()

@@ -26,6 +26,20 @@ export type DeskState = {
 	peekEndsAt: number, -- solo: server clock time the rulebook closes, or 0 while it is shut
 }
 
+export type Trait = "colour" | "shape" | "handles"
+
+-- One message on the ping board. The server builds it; a client only picks the stamp.
+-- A trait or rule stamp with neither `value` nor `ruleId` is a question.
+export type Ping = {
+	seq: number, -- counts every ping since the server started
+	deal: number, -- the rulebook in force when it was sent
+	parcelSeq: number, -- the parcel on the desk when it was sent, or 0
+	from: Desk,
+	stamp: string, -- an id from StampDefs
+	value: (string | number)?, -- the Scanner stating a trait of the parcel on the desk
+	ruleId: string?, -- the Clerk showing a rule
+}
+
 export type Phase = "Waiting" | "Running" | "Ended"
 export type EndReason = "TimeUp" | "StruckOut"
 
@@ -37,6 +51,7 @@ export type PublicShiftState = {
 	strikes: number,
 	correct: number,
 	parcelSeq: number, -- number of the parcel on the desk, or 0 when the desk is empty
+	deal: number, -- goes up each time the rules are picked: a new shift, or a change of team
 	endReason: EndReason?,
 }
 
