@@ -3,6 +3,9 @@
 *.rbxlx.lock
 sourcemap.json
 
+# Roblox type definitions downloaded by scripts/check.ps1
+.luau-types/
+
 # Editors / OS
 .vscode/
 Thumbs.db
