@@ -3,7 +3,8 @@
 --
 --   Waiting --(first player arrives)--> Running --(time up, or too many mistakes)--> Ended
 --                                          ^                                           |
---                                          +--------(a player asks for a new shift)----+
+--                                          +---(a player asks for a new shift,---------+
+--                                               or a new player arrives)
 --
 -- While Running, the desk is either empty or holds one parcel waiting for a verdict.
 local Players = game:GetService("Players")
@@ -47,6 +48,7 @@ local deal = 0
 local shiftDay = 0
 -- How many correctly handled parcels each player has been present for this shift.
 local credit: { [Player]: number } = {}
+local playersBefore = 0
 
 local startTimer: thread? = nil
 local endTimer: thread? = nil
@@ -184,11 +186,24 @@ end
 -- no cost to the team. What anyone saw before is then worth nothing.
 -- DeskService sends each player their share of the new deal straight after this.
 local function onRosterChanged(playerCount: number)
+	local someoneJoined = playerCount > playersBefore
+	playersBefore = playerCount
 	-- Forget anyone who has gone, so the table only ever holds players who are here.
 	for player in credit do
 		if player.Parent ~= Players then
 			credit[player] = nil
 		end
+	end
+	-- No menus for someone who has just arrived: if the last shift is over, the
+	-- next one starts by itself instead of waiting for a button. It still starts
+	-- if they leave again within the delay; anyone could have pressed Play again.
+	if someoneJoined and phase == "Ended" and not startTimer then
+		startTimer = task.delay(Config.ShiftStartDelay, function()
+			startTimer = nil
+			if phase == "Ended" then
+				startShift()
+			end
+		end)
 	end
 	if phase ~= "Running" or playerCount < 2 then
 		return

@@ -48,6 +48,13 @@ Approved by Isaac. Each ends with something playable.
 
 If the schedule slips, cut the collection book first, then the odd parcel.
 
+Where things stand on 2026-10-09:
+
+- Weeks 1 to 4 are built. Isaac has played and approved week 1, and week 2 alone. Weeks 3 and 4 were built in one unattended run and have not been played by him.
+- Week 5: the cold open and the three prompts are built. The invite button, the game pass, and the analytics events are not; all three need a published place to test.
+- Week 6 has not started.
+- Nothing has been played by two real people. The server side of multi-player and of saving is checked by `tests/Simulate.luau`; what two clients see on screen, and saving to Roblox's real store, are unverified.
+
 Open design questions, to settle in the milestone named:
 
 - Saving has only been run against a fake data store in the simulation. To check it for real Isaac must publish the place (File, then Publish to Roblox), then in Game Settings under Security turn on Studio access to API services, set the maximum players to 4, and play two sessions to see a stamp survive leaving and coming back.

@@ -42,7 +42,7 @@ local function scaleOf(target: GuiObject): UIScale
 	return made
 end
 
-local function pop(target: GuiObject, from: number)
+function Feedback.pop(target: GuiObject, from: number)
 	local scale = scaleOf(target)
 	scale.Scale = from
 	TweenService:Create(scale, POP, { Scale = 1 }):Play()
@@ -72,7 +72,7 @@ function Feedback.start()
 	ShiftClient.onVerdict(function(_seq: number, _verdict: Types.Verdict, wasCorrect: boolean)
 		feedbackLabel.Text = if wasCorrect then "Correct!" else "Mistake!"
 		feedbackLabel.BackgroundColor3 = if wasCorrect then RIGHT else WRONG
-		pop(feedbackLabel, 1.5)
+		Feedback.pop(feedbackLabel, 1.5)
 		showFor(feedbackLabel, FEEDBACK_SECONDS)
 		Feedback.play("Stamp")
 		Feedback.play(if wasCorrect then "Correct" else "Mistake")
@@ -80,7 +80,7 @@ function Feedback.start()
 
 	local function notice(text: string, sound: string)
 		noticeLabel.Text = text
-		pop(noticeLabel, 0.7)
+		Feedback.pop(noticeLabel, 0.7)
 		showFor(noticeLabel, NOTICE_SECONDS)
 		Feedback.play(sound)
 	end
@@ -123,10 +123,10 @@ function Feedback.start()
 			return
 		end
 		if state.strikes > previous.strikes then
-			pop(strikesLabel, 1.35)
+			Feedback.pop(strikesLabel, 1.35)
 		end
 		if state.correct > previous.correct then
-			pop(correctLabel, 1.35)
+			Feedback.pop(correctLabel, 1.35)
 		end
 		if
 			state.phase == "Running"

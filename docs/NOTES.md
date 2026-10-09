@@ -4,7 +4,7 @@ Plain-language notes on every system, kept current as the game is built.
 
 ## Status
 
-Milestones 3 and 4 of 6 are built and waiting for a playtest. Milestone 3 is the ping board, the parcel moving through the room, and feedback on every verdict. Milestone 4 is the rule of the day, the odd parcel, the postal licence, the collection book, and saving. Milestone 2 (the two desks) is built and its solo side is approved.
+Milestones 3 and 4 of 6 are built and waiting for a playtest, along with the first part of milestone 5. Milestone 3 is the ping board, the parcel moving through the room, and feedback on every verdict. Milestone 4 is the rule of the day, the odd parcel, the postal licence, the collection book, and saving. From milestone 5, the no-menu start and the first-time prompts are built; the invite button, the game pass, and analytics are not. Milestone 2 (the two desks) is built and its solo side is approved.
 
 Two things are checked only by simulation so far. Nothing has been played by two real people yet, and saving has not run against Roblox's real data store, which needs the place to be published.
 
@@ -71,7 +71,7 @@ The server runs one shift at a time for everyone in it. A shift is always in one
 |---|---|---|
 | Waiting | Nobody has played yet. | The first player arrives; the shift starts 2 seconds later. |
 | Running | Parcels arrive one at a time. | The timer runs out ("TimeUp") or mistakes reach the limit ("StruckOut"). |
-| Ended | The results are on screen. | A player presses Play again. |
+| Ended | The results are on screen. | A player presses Play again, or a new player arrives. |
 
 While a shift is running, the desk is either empty or holds exactly one parcel waiting for a verdict. When a verdict arrives, the server clears the desk first, then scores it, then schedules the next parcel 1.5 seconds later. Clearing first is what makes a second request for the same parcel fail.
 
@@ -192,6 +192,14 @@ It shows only the half that belongs to the player's desk: the X-ray panel at the
 
 The countdowns are the one thing worked out on the client. The server sends each deadline once, and the client subtracts the shared server clock from it four times a second.
 
+### The first minute (`src/client/Tutorial.luau`, and `onRosterChanged` in `src/server/ShiftService.luau`)
+
+There is no menu. A shift starts two seconds after a player arrives and the first parcel comes three seconds after that, so a new player has something to do within about six seconds of joining. If they arrive while an earlier shift's results are showing, the next shift starts by itself.
+
+A player whose collection book is empty is treated as new and gets three short prompts on their first parcel: what the X-ray is, to open the rulebook, and to stamp. Each one moves on when the player does it, or after a few seconds, and the first verdict ends them. They never block the game. There is a different set of three for each desk when the desks are split.
+
+Using the empty collection book as the sign of a new player means nothing extra has to be saved to remember that the prompts were shown.
+
 ### The camera (`src/client/DeskCamera.luau`)
 
 The camera does not follow the character. Each desk has an invisible marker part in the room, and the camera sits exactly where that part is, facing the way it faces. Moving or turning the part in Studio changes the view. When a lone player switches desks the camera glides to the other marker.
@@ -278,6 +286,7 @@ Where the type says "any element", the code only shows, hides, or recolours it, 
 | `VerdictBar.ReturnButton` | TextButton | Return |
 | `FeedbackLabel` | TextLabel | "Correct!" or "Mistake!" after a verdict; its background is coloured by code |
 | `NoticeLabel` | TextLabel | A short notice, such as a change of rulebook |
+| `TutorialLabel` | TextLabel | The first-time prompts; it sits over the hint line while they run |
 | `PingBar` | any element with a layout | Holds one button per stamp; shown only when the desks are split |
 | `PingBar.StampTemplate` | TextButton, hidden | Copied once per stamp |
 | `PingFeed` | any element with a layout sorted by LayoutOrder | Holds the most recent pings. Put no other TextLabel in it. |

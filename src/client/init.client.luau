@@ -13,6 +13,7 @@ local ParcelView = require(script.ParcelView)
 local PingUi = require(script.PingUi)
 local ProgressUi = require(script.ProgressUi)
 local ShiftClient = require(script.ShiftClient)
+local Tutorial = require(script.Tutorial)
 
 -- One part failing to start, say because a piece of the layout was deleted in
 -- Studio, must not take the rest of the game down with it.
@@ -31,4 +32,5 @@ start("Feedback", Feedback.start)
 start("PingUi", PingUi.start)
 start("ParcelView", ParcelView.start)
 start("ProgressUi", ProgressUi.start)
+start("Tutorial", Tutorial.start)
 ShiftClient.start()

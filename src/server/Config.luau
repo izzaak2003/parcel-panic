@@ -19,7 +19,7 @@ return table.freeze({
 	ShiftSeconds = tuned("ShiftSeconds", 480),
 	MaxStrikes = tuned("MaxStrikes", 3),
 	RulesPerShift = tuned("RulesPerShift", 3),
-	ShiftStartDelay = tuned("ShiftStartDelay", 2), -- first player arriving to the shift starting
+	ShiftStartDelay = tuned("ShiftStartDelay", 2), -- a player arriving to the shift starting, when none is running
 	FirstParcelDelay = tuned("FirstParcelDelay", 3), -- shift starting to the first parcel
 	ParcelGap = tuned("ParcelGap", 1.5), -- a verdict to the next parcel
 	ReturnChance = tuned("ReturnChance", 0.5), -- share of parcels that should go back

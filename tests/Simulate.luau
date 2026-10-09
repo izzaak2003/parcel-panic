@@ -640,6 +640,22 @@ check(
 )
 checkSplit("new shift")
 
+section("someone arrives while the results are showing")
+for _ = 1, 3 do
+	settleDown()
+	stamp(c, shift("C").parcelSeq, if rightVerdict() == "Ship" then "Return" else "Ship")
+end
+task.wait(0.05)
+check("the shift is over again", shift("A").phase == "Ended")
+local x = join("X")
+settleDown()
+check(
+	"a new shift starts by itself, so the newcomer is not left on a results screen",
+	shift("X").phase == "Running" and shift("X").strikes == 0
+)
+leave(x)
+settleDown()
+
 section("everyone but one leaves; the lone player's rulebook time")
 leave(b)
 leave(a)
