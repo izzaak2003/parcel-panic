@@ -19,6 +19,7 @@ return table.freeze({
 	VerdictJudged = event("VerdictJudged"), -- (seq: number, verdict: Verdict, wasCorrect: boolean)
 	DeskSync = event("DeskSync"), -- (state: DeskState) this player's own desk, sent whenever it changes
 	PingShown = event("PingShown"), -- (ping: Ping) a stamp on the ping board, sent to everyone
+	ProgressSync = event("ProgressSync"), -- (progress: Progress) this player's licence and collection
 
 	-- Client to server. These are requests; the server checks every one.
 	SubmitVerdict = event("SubmitVerdict"), -- (seq: number, verdict: Verdict)

@@ -15,6 +15,7 @@
         "VerdictJudged": { "$className": "RemoteEvent" },
         "DeskSync": { "$className": "RemoteEvent" },
         "PingShown": { "$className": "RemoteEvent" },
+        "ProgressSync": { "$className": "RemoteEvent" },
         "SendPing": { "$className": "RemoteEvent" },
         "SubmitVerdict": { "$className": "RemoteEvent" },
         "RequestShift": { "$className": "RemoteEvent" },

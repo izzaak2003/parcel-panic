@@ -40,6 +40,29 @@ export type Ping = {
 	ruleId: string?, -- the Clerk showing a rule
 }
 
+-- The postal licence: a card of stamps, one earned per day played. Nothing is
+-- lost by missing a day.
+export type Licence = {
+	stamps: number, -- on the current card
+	cards: number, -- cards already filled
+	lastStampDay: number, -- the day the last stamp was earned, counted in days since 1970 (UTC)
+}
+
+-- What is saved for a player.
+export type PlayerSave = {
+	version: number,
+	licence: Licence,
+	collection: { [string]: boolean }, -- ids from ParcelDefs.Items the player has handled correctly
+}
+
+-- What a player is told about their own progress. Sent only to that player.
+export type Progress = {
+	licence: Licence,
+	licenceSlots: number, -- stamps on a full card
+	collection: { [string]: boolean },
+	saving: boolean, -- false when this session's progress cannot be saved
+}
+
 export type Phase = "Waiting" | "Running" | "Ended"
 export type EndReason = "TimeUp" | "StruckOut"
 
@@ -52,6 +75,7 @@ export type PublicShiftState = {
 	correct: number,
 	parcelSeq: number, -- number of the parcel on the desk, or 0 when the desk is empty
 	deal: number, -- goes up each time the rules are picked: a new shift, or a change of team
+	dailyRuleId: string, -- the rule of the day, which everyone may see; "" outside a shift
 	endReason: EndReason?,
 }
 

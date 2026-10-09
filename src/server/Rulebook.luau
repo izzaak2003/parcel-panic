@@ -25,10 +25,30 @@ function Rulebook.judge(rules: { RuleDefs.Rule }, contents: Types.Contents): Typ
 	return "Ship"
 end
 
-function Rulebook.pick(rng: Random, count: number): { RuleDefs.Rule }
-	local pool = table.clone(RuleDefs.All)
-	rng:Shuffle(pool)
-	return table.move(pool, 1, math.min(count, #pool), 1, {})
+-- The rule of the day: the same for every player on a given day, and shown to
+-- everyone. It is worked out from the date alone, so it is not a secret and is
+-- not treated as one.
+function Rulebook.daily(day: number): RuleDefs.Rule
+	return RuleDefs.All[Random.new(day):NextInteger(1, #RuleDefs.All)]
+end
+
+-- The rulebook for a shift: the rule of the day first, then others picked at
+-- random with `rng`, which must not be seeded from anything a player could know.
+function Rulebook.pick(rng: Random, count: number, day: number): { RuleDefs.Rule }
+	local daily = Rulebook.daily(day)
+	local others = {}
+	for _, rule in RuleDefs.All do
+		if rule ~= daily then
+			table.insert(others, rule)
+		end
+	end
+	rng:Shuffle(others)
+
+	local rules = { daily }
+	for index = 1, math.min(count - 1, #others) do
+		table.insert(rules, others[index])
+	end
+	return rules
 end
 
 return Rulebook

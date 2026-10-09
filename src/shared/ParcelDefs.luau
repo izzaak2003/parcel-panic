@@ -7,10 +7,12 @@ export type ItemDef = {
 	name: string,
 	shape: Types.Shape,
 	handles: number,
+	odd: boolean?, -- a rare surprise: it turns up now and then, and is judged like any other
 }
 
--- Each shape and each handle count appears on exactly two items, so no rule is
--- much easier or harder to hit than another.
+-- Among the ordinary items, each shape and each handle count appears on exactly
+-- two, so no rule is much easier or harder to hit than another. The order here
+-- is the order of the slots in the collection book.
 local items: { ItemDef } = {
 	{ id = "ball", name = "Bouncy Ball", shape = "Round", handles = 0 },
 	{ id = "teapot", name = "Teapot", shape = "Round", handles = 1 },
@@ -18,6 +20,7 @@ local items: { ItemDef } = {
 	{ id = "basket", name = "Picnic Basket", shape = "Square", handles = 2 },
 	{ id = "trophy", name = "Trophy", shape = "Tall", handles = 2 },
 	{ id = "candle", name = "Candle", shape = "Tall", handles = 0 },
+	{ id = "snowglobe", name = "Singing Snow Globe", shape = "Round", handles = 0, odd = true },
 }
 
 local colours: { Types.Colour } = { "Red", "Blue", "Green", "Yellow" }

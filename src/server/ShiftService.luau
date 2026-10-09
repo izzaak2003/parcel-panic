@@ -9,9 +9,11 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Calendar = require(script.Parent.Calendar)
 local Config = require(script.Parent.Config)
 local DeskService = require(script.Parent.DeskService)
 local ParcelGenerator = require(script.Parent.ParcelGenerator)
+local PlayerData = require(script.Parent.PlayerData)
 local RateLimit = require(script.Parent.RateLimit)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local RuleDefs = require(ReplicatedStorage.Shared.RuleDefs)
@@ -40,6 +42,11 @@ local parcel: Types.Contents? = nil -- the parcel on the desk, or nil when the d
 local parcelSeq = 0
 -- Goes up each time rules are picked, so clients can tell a new rulebook from the old.
 local deal = 0
+-- The date this shift started on. It fixes the rule of the day for the whole
+-- shift, even one that runs past midnight or is dealt again.
+local shiftDay = 0
+-- How many correctly handled parcels each player has been present for this shift.
+local credit: { [Player]: number } = {}
 
 local startTimer: thread? = nil
 local endTimer: thread? = nil
@@ -54,6 +61,8 @@ local function publicState(): Types.PublicShiftState
 		correct = correct,
 		parcelSeq = if parcel then parcelSeq else 0,
 		deal = deal,
+		-- The first rule in the book is the rule of the day, which is public.
+		dailyRuleId = if phase == "Running" and rules[1] then rules[1].id else "",
 		endReason = endReason,
 	}
 end
@@ -109,7 +118,7 @@ local function putParcelOnDesk()
 		return
 	end
 	parcelSeq += 1
-	parcel = ParcelGenerator.draw(currentDeck, rng, Config.ReturnChance)
+	parcel = ParcelGenerator.draw(currentDeck, rng, Config.ReturnChance, Config.OddChance)
 	broadcast()
 	for _, player in Players:GetPlayers() do
 		showParcel(player)
@@ -130,19 +139,21 @@ end
 -- Picks rules that leave at least one parcel to ship and one to send back.
 local function chooseRules(): ({ RuleDefs.Rule }, ParcelGenerator.Deck)
 	for _ = 1, 20 do
-		local picked = Rulebook.pick(rng, Config.RulesPerShift)
+		local picked = Rulebook.pick(rng, Config.RulesPerShift, shiftDay)
 		local dealt = ParcelGenerator.deal(picked)
 		if #dealt.ship > 0 and #dealt.back > 0 then
 			return picked, dealt
 		end
 	end
 	-- A single rule names one value of one trait, so it can never cover every parcel.
-	local fallback = Rulebook.pick(rng, 1)
+	local fallback = Rulebook.pick(rng, 1, shiftDay)
 	return fallback, ParcelGenerator.deal(fallback)
 end
 
 local function startShift()
 	cancelTimers()
+	shiftDay = Calendar.today()
+	table.clear(credit)
 	rules, deck = chooseRules()
 	deal += 1
 	phase = "Running"
@@ -173,6 +184,12 @@ end
 -- no cost to the team. What anyone saw before is then worth nothing.
 -- DeskService sends each player their share of the new deal straight after this.
 local function onRosterChanged(playerCount: number)
+	-- Forget anyone who has gone, so the table only ever holds players who are here.
+	for player in credit do
+		if player.Parent ~= Players then
+			credit[player] = nil
+		end
+	end
 	if phase ~= "Running" or playerCount < 2 then
 		return
 	end
@@ -211,6 +228,22 @@ local function onSubmitVerdict(player: Player, seq: unknown, verdict: unknown)
 	else
 		broadcast()
 		queueParcel(Config.ParcelGap)
+	end
+
+	-- Rewards come last, after the shift itself has moved on. The whole team
+	-- handled the parcel, so everyone present gets the item in their collection
+	-- book, and credit towards the day's licence stamp.
+	if wasCorrect then
+		for _, teammate in Players:GetPlayers() do
+			PlayerData.collect(teammate, judged.item)
+			local earned = (credit[teammate] or 0) + 1
+			credit[teammate] = earned
+			-- Asked again on every parcel after that, in case the player's data was
+			-- still loading the first time. A second stamp for one day is refused.
+			if earned >= Config.StampParcels then
+				PlayerData.stamp(teammate, shiftDay)
+			end
+		end
 	end
 end
 
@@ -287,6 +320,9 @@ end
 function ShiftService.start()
 	Remotes.SubmitVerdict.OnServerEvent:Connect(onSubmitVerdict)
 	Remotes.RequestShift.OnServerEvent:Connect(onRequestShift)
+	Players.PlayerRemoving:Connect(function(player)
+		credit[player] = nil
+	end)
 	DeskService.start(onDeskChanged, onRosterChanged)
 end
 
