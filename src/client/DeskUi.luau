@@ -1,7 +1,8 @@
 --!strict
 -- Connects the on-screen desk to the shift. The layout is StarterGui.DeskGui,
 -- built in Studio; this code only fills it in and reports button presses.
--- It decides nothing: it draws what the server sent and asks the server for verdicts.
+-- It decides nothing: it draws what the server sent and asks the server to act.
+local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -12,6 +13,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 
 local FEEDBACK_SECONDS = 1.2
 local HANDLE_TEXT = { [0] = "No handles", [1] = "One handle", [2] = "Two handles" }
+local ROLE_TEXT: { [Types.Desk]: string } = { Scanner = "SCANNER DESK", Clerk = "CLERK DESK" }
 
 local DeskUi = {}
 
@@ -44,7 +46,23 @@ local function button(parent: Instance, name: string): TextButton
 	return found
 end
 
-function DeskUi.start()
+-- One line telling the player what to do now.
+local function hintFor(desk: Types.DeskState, onDesk: boolean): string
+	if not onDesk then
+		return "Next parcel on its way..."
+	elseif desk.solo then
+		return if desk.desk == "Scanner"
+			then "Look at the X-ray, check the rulebook, then stamp the parcel."
+			else "Remember the rules, then go back to the X-ray."
+	elseif desk.desk == "Scanner" then
+		return "Tell the Clerk what is inside the parcel."
+	else
+		return "Ask the Scanner what is inside, then stamp the parcel."
+	end
+end
+
+-- `showDesk` is called with the player's desk whenever the server changes it.
+function DeskUi.start(showDesk: (Types.Desk) -> ())
 	local gui = child(child(Players.LocalPlayer, "PlayerGui"), "DeskGui")
 	if gui:IsA("ScreenGui") and gui.ResetOnSpawn then
 		warn(
@@ -56,6 +74,8 @@ function DeskUi.start()
 	local timerLabel = label(topBar, "TimerLabel")
 	local strikesLabel = label(topBar, "StrikesLabel")
 	local correctLabel = label(topBar, "CorrectLabel")
+	local roleLabel = label(gui, "RoleLabel")
+	local hintLabel = label(gui, "HintLabel")
 
 	local scannerPanel = element(gui, "ScannerPanel")
 	local emptyLabel = label(scannerPanel, "EmptyLabel")
@@ -66,12 +86,17 @@ function DeskUi.start()
 	local colourLabel = label(contentsFrame, "ColourLabel")
 	local colourSwatch = element(contentsFrame, "ColourSwatch")
 
-	local ruleList = element(element(gui, "ClerkPanel"), "RuleList")
+	local clerkPanel = element(gui, "ClerkPanel")
+	local ruleList = element(clerkPanel, "RuleList")
 	local ruleTemplate = label(ruleList, "RuleTemplate")
 
 	local verdictBar = element(gui, "VerdictBar")
 	local shipButton = button(verdictBar, "ShipButton")
 	local returnButton = button(verdictBar, "ReturnButton")
+
+	local switchPanel = element(gui, "SwitchPanel")
+	local switchButton = button(switchPanel, "SwitchButton")
+	local peekLabel = label(switchPanel, "PeekLabel")
 
 	local feedbackLabel = label(gui, "FeedbackLabel")
 
@@ -82,22 +107,41 @@ function DeskUi.start()
 
 	-- The latest of each message from the server. Drawing always starts from these.
 	local state: Types.PublicShiftState? = nil
+	local desk: Types.DeskState? = nil
 	local scannedSeq = 0
 	local scanned: Types.Contents? = nil
 
+	local function peekSecondsLeft(own: Types.DeskState): number
+		if own.peekEndsAt > 0 then
+			return math.max(0, own.peekEndsAt - workspace:GetServerTimeNow())
+		end
+		return own.peekLeft
+	end
+
 	local function render()
 		local current = state
-		if not current then
+		local own = desk
+		if not current or not own then
 			return
 		end
+		local running = current.phase == "Running"
+		local onDesk = running and current.parcelSeq > 0
+		local atScanner = own.desk == "Scanner"
 
 		strikesLabel.Text = `Mistakes: {current.strikes} / {current.maxStrikes}`
 		correctLabel.Text = `Parcels: {current.correct}`
-		if current.phase ~= "Running" then
+		if not running then
 			timerLabel.Text = "--:--"
 		end
+		roleLabel.Text = ROLE_TEXT[own.desk]
+		hintLabel.Visible = running
+		hintLabel.Text = hintFor(own, onDesk)
 
-		local onDesk = current.phase == "Running" and current.parcelSeq > 0
+		-- Each desk shows only its own half. A lone player holds both halves but
+		-- still sees one at a time.
+		scannerPanel.Visible = atScanner
+		clerkPanel.Visible = not atScanner
+
 		local contents = if onDesk and scannedSeq == current.parcelSeq then scanned else nil
 		contentsFrame.Visible = contents ~= nil
 		emptyLabel.Visible = contents == nil
@@ -114,11 +158,23 @@ function DeskUi.start()
 			emptyLabel.Text = "Next parcel on its way..."
 		end
 
-		verdictBar.Visible = current.phase ~= "Ended"
+		verdictBar.Visible = current.phase ~= "Ended" and own.canStamp
 		shipButton.Active = onDesk
 		returnButton.Active = onDesk
 		shipButton.AutoButtonColor = onDesk
 		returnButton.AutoButtonColor = onDesk
+
+		switchPanel.Visible = own.solo and running
+		local canOpen = peekSecondsLeft(own) > 0
+		switchButton.Active = not atScanner or canOpen
+		switchButton.AutoButtonColor = switchButton.Active
+		if not atScanner then
+			switchButton.Text = "Back to X-ray  [Q]"
+		elseif canOpen then
+			switchButton.Text = "Open rulebook  [Q]"
+		else
+			switchButton.Text = "Rulebook shut until the next parcel"
+		end
 
 		endPanel.Visible = current.phase == "Ended"
 		if current.phase == "Ended" then
@@ -135,6 +191,34 @@ function DeskUi.start()
 		render()
 	end)
 
+	local function clearRules()
+		for _, row in ruleList:GetChildren() do
+			if row:IsA("TextLabel") and row ~= ruleTemplate then
+				row:Destroy()
+			end
+		end
+	end
+
+	Remotes.DeskSync.OnClientEvent:Connect(function(newDesk: Types.DeskState)
+		local previous = desk
+		desk = newDesk
+		-- Once the desks are split, drop whatever belonged to the other one. The
+		-- server has already dealt new rules and a new parcel by then, so this is
+		-- tidying, not what keeps the halves apart.
+		if not newDesk.solo then
+			if newDesk.desk == "Scanner" then
+				clearRules()
+			else
+				scannedSeq = 0
+				scanned = nil
+			end
+		end
+		if not previous or previous.desk ~= newDesk.desk then
+			showDesk(newDesk.desk)
+		end
+		render()
+	end)
+
 	Remotes.ParcelScanned.OnClientEvent:Connect(function(seq: number, contents: Types.Contents)
 		scannedSeq = seq
 		scanned = contents
@@ -142,11 +226,7 @@ function DeskUi.start()
 	end)
 
 	Remotes.RulebookShown.OnClientEvent:Connect(function(ruleIds: { string })
-		for _, row in ruleList:GetChildren() do
-			if row:IsA("TextLabel") and row ~= ruleTemplate then
-				row:Destroy()
-			end
-		end
+		clearRules()
 		for index, id in ruleIds do
 			local rule = RuleDefs.ById[id]
 			if rule then
@@ -185,6 +265,14 @@ function DeskUi.start()
 		end
 	end
 
+	-- The server decides whether a switch is allowed; this only asks.
+	local function requestSwitch()
+		local own = desk
+		if own and own.solo then
+			Remotes.RequestSwitch:FireServer()
+		end
+	end
+
 	-- Activated fires for mouse clicks, screen taps, and gamepad presses alike.
 	shipButton.Activated:Connect(function()
 		submit("Ship")
@@ -195,15 +283,34 @@ function DeskUi.start()
 	playAgainButton.Activated:Connect(function()
 		Remotes.RequestShift:FireServer()
 	end)
+	switchButton.Activated:Connect(requestSwitch)
 
-	-- Runs for as long as the player is in the game. The server sends the time the
-	-- shift ends once; the countdown is worked out here from the shared server clock.
+	-- Q is a shortcut for the on-screen switch button, never the only way.
+	ContextActionService:BindAction(
+		"SwitchDesk",
+		function(_name: string, inputState: Enum.UserInputState)
+			if inputState == Enum.UserInputState.Begin then
+				requestSwitch()
+			end
+			return Enum.ContextActionResult.Pass
+		end,
+		false,
+		Enum.KeyCode.Q,
+		Enum.KeyCode.ButtonY
+	)
+
+	-- Runs for as long as the player is in the game. The server sends each deadline
+	-- once; the countdowns are worked out here from the shared server clock.
 	task.spawn(function()
 		while true do
 			local current = state
+			local own = desk
 			if current and current.phase == "Running" then
 				local left = math.max(0, math.ceil(current.endsAt - workspace:GetServerTimeNow()))
 				timerLabel.Text = string.format("%d:%02d", left // 60, left % 60)
+				if own and own.solo then
+					peekLabel.Text = `Rulebook time: {math.ceil(peekSecondsLeft(own))}s`
+				end
 			end
 			task.wait(0.25)
 		end

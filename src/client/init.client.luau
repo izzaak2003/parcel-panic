@@ -5,6 +5,8 @@ if not game:IsLoaded() then
 	game.Loaded:Wait()
 end
 
+local DeskCamera = require(script.DeskCamera)
 local DeskUi = require(script.DeskUi)
 
-DeskUi.start()
+DeskCamera.start()
+DeskUi.start(DeskCamera.show)
