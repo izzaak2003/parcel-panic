@@ -11,6 +11,7 @@ local DeskUi = require(script.DeskUi)
 local Feedback = require(script.Feedback)
 local ParcelView = require(script.ParcelView)
 local PingUi = require(script.PingUi)
+local ProgressUi = require(script.ProgressUi)
 local ShiftClient = require(script.ShiftClient)
 
 -- One part failing to start, say because a piece of the layout was deleted in
@@ -29,4 +30,5 @@ start("DeskUi", DeskUi.start)
 start("Feedback", Feedback.start)
 start("PingUi", PingUi.start)
 start("ParcelView", ParcelView.start)
+start("ProgressUi", ProgressUi.start)
 ShiftClient.start()

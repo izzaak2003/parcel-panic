@@ -11,6 +11,7 @@ local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 
 local Gui = require(script.Parent.Gui)
+local ParcelDefs = require(ReplicatedStorage.Shared.ParcelDefs)
 local ShiftClient = require(script.Parent.ShiftClient)
 local Types = require(ReplicatedStorage.Shared.Types)
 
@@ -77,6 +78,42 @@ function Feedback.start()
 		Feedback.play(if wasCorrect then "Correct" else "Mistake")
 	end)
 
+	local function notice(text: string, sound: string)
+		noticeLabel.Text = text
+		pop(noticeLabel, 0.7)
+		showFor(noticeLabel, NOTICE_SECONDS)
+		Feedback.play(sound)
+	end
+
+	-- The licence: say so when a stamp is earned.
+	local stampsBefore: number? = nil
+	ShiftClient.onChanged(function()
+		local progress = ShiftClient.getProgress()
+		if not progress then
+			return
+		end
+		local total = progress.licence.cards * progress.licenceSlots + progress.licence.stamps
+		local previous = stampsBefore
+		stampsBefore = total
+		if previous and total > previous and ShiftClient.isLive() then
+			notice("Licence stamp earned!", "Stamp")
+		end
+	end)
+
+	-- The odd parcel: a small surprise for whoever can see inside it.
+	local oddSeq = 0
+	ShiftClient.onChanged(function()
+		local state = ShiftClient.getState()
+		local contents = ShiftClient.getContents()
+		local item = if contents then ParcelDefs.ItemsById[contents.item] else nil
+		if state and item and item.odd and state.parcelSeq ~= oddSeq then
+			oddSeq = state.parcelSeq
+			if ShiftClient.isLive() then
+				notice("Something odd has arrived!", "NewRules")
+			end
+		end
+	end)
+
 	local before: Types.PublicShiftState? = nil
 	ShiftClient.onChanged(function()
 		local state = ShiftClient.getState()
@@ -104,10 +141,7 @@ function Feedback.start()
 			and previous.phase == "Running"
 			and state.deal ~= previous.deal
 		then
-			noticeLabel.Text = "Team changed: new rulebook!"
-			pop(noticeLabel, 0.7)
-			showFor(noticeLabel, NOTICE_SECONDS)
-			Feedback.play("NewRules")
+			notice("Team changed: new rulebook!", "NewRules")
 		end
 	end)
 end

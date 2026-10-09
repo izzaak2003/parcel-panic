@@ -16,6 +16,7 @@ local desk: Types.DeskState? = nil
 local scannedSeq = 0
 local scanned: Types.Contents? = nil
 local ruleIds: { string } = {}
+local progress: Types.Progress? = nil
 local live = false
 
 local changeListeners: { () -> () } = {}
@@ -43,6 +44,11 @@ end
 
 function ShiftClient.getRuleIds(): { string }
 	return ruleIds
+end
+
+-- This player's licence and collection book, once the server has sent them.
+function ShiftClient.getProgress(): Types.Progress?
+	return progress
 end
 
 -- What is inside the parcel on the desk, if this player has been told.
@@ -138,6 +144,11 @@ function ShiftClient.start()
 
 	Remotes.RulebookShown.OnClientEvent:Connect(function(ids: { string })
 		ruleIds = ids
+		changed()
+	end)
+
+	Remotes.ProgressSync.OnClientEvent:Connect(function(newProgress: Types.Progress)
+		progress = newProgress
 		changed()
 	end)
 

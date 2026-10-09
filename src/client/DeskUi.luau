@@ -76,8 +76,8 @@ function DeskUi.start()
 
 	-- The rule rows are rebuilt only when the rulebook itself changes.
 	local shownRules = ""
-	local function drawRules(ruleIds: { string })
-		local key = table.concat(ruleIds, ",")
+	local function drawRules(ruleIds: { string }, dailyId: string)
+		local key = table.concat(ruleIds, ",") .. "|" .. dailyId
 		if key == shownRules then
 			return
 		end
@@ -88,7 +88,7 @@ function DeskUi.start()
 			if rule then
 				local row = ruleTemplate:Clone()
 				row.Name = "Rule"
-				row.Text = rule.text
+				row.Text = if id == dailyId then `Today: {rule.text}` else rule.text
 				row.LayoutOrder = index
 				row.Visible = true
 				row.Parent = ruleList
@@ -116,14 +116,17 @@ function DeskUi.start()
 			timerLabel.Text = "--:--"
 		end
 		roleLabel.Text = ROLE_TEXT[desk.desk]
+		roleLabel.Visible = state.phase ~= "Ended"
 		hintLabel.Visible = running
 		hintLabel.Text = hintFor(desk, onDesk)
 
 		-- Each desk shows only its own half. A lone player holds both halves but
 		-- still sees one at a time.
-		scannerPanel.Visible = atScanner
-		clerkPanel.Visible = not atScanner
-		drawRules(ShiftClient.getRuleIds())
+		-- Both make way for the results once the shift is over.
+		local working = state.phase ~= "Ended"
+		scannerPanel.Visible = working and atScanner
+		clerkPanel.Visible = working and not atScanner
+		drawRules(ShiftClient.getRuleIds(), state.dailyRuleId)
 
 		local contents = ShiftClient.getContents()
 		contentsFrame.Visible = contents ~= nil
