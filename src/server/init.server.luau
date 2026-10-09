@@ -1,6 +1,4 @@
 --!strict
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ShiftService = require(script.ShiftService)
 
-local hello = require(ReplicatedStorage.Shared.Hello)
-
-print(hello("server"))
+ShiftService.start()
